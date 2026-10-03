@@ -1,10 +1,12 @@
 #include "Geometry.hpp"
 #include "AdvancedGeometry.hpp"
+#include "Image.hpp"
 #include "Scene.hpp"
 #include "TextScroller.hpp"
 #include "Timeline.hpp"
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <set>
 static void req(bool x,const char*m){if(!x){std::cerr<<"FAIL: "<<m<<"\n";std::exit(1);}}
@@ -49,5 +51,14 @@ int main(){
     bool advanced=false;
     for(double t=0;t<60;t+=0.01){if(scrollOffset(t,0.f,100.f,50.f)>0.f){advanced=true;break;}}
     req(advanced,"scroll advances over time");}
+  // Image: decode + discovery (uses the repo's UBER logo pack when present)
+  { Image miss;req(!Image::loadFromFile("/nonexistent/xyz.jpg",miss),"load missing -> false");
+   auto logos=findLogos("/home/ulf/privat/wireframe-scroller/UBER_Fullscreen_Logo_Pack");
+   req(findLogos("/nonexistent/dir").empty(),"findLogos missing -> empty");
+   if(!logos.empty()){
+     req(logos.size()>=20,"logo pack has 20 cards");
+     Image im;req(Image::loadFromFile(logos[0],im),"logo decodes");
+     req(im.w==1920&&im.h==1080,"logo 1920x1080");
+     req(im.rgba.size()==(size_t)1920*1080*4,"logo rgba size");}}
   std::cout<<"geometry_tests: PASS; exact 120-cell V="<<c120.v.size()<<" E="<<c120.e.size()<<"\n";
 }
