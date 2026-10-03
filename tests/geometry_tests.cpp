@@ -51,6 +51,19 @@ int main(){
     bool advanced=false;
     for(double t=0;t<60;t+=0.01){if(scrollOffset(t,0.f,100.f,50.f)>0.f){advanced=true;break;}}
     req(advanced,"scroll advances over time");}
+  // Scroller font decode: the EXACT bit math the GLSL shader uses must match
+  // the raw glyph bits for every (glyph, x, y) - a regression guard so the
+  // marquee can't silently render blank again.
+  { auto g=textfont::glyphs();int mism=0;
+   for(int gi=0;gi<textfont::glyphCount();gi++)for(int y=0;y<7;y++)for(int x=0;x<5;x++){
+     unsigned char row=g[gi].rows[y];int bit=4-x;int expected=(row>>bit)&1;
+     int v=row;double b=std::fmod(std::floor(v/std::pow(2.0,bit)),2.0);
+     int got=(b>0.5)?1:0;if(got!=expected)mism++;}
+   req(mism==0,"scroller font decode matches glyph bits");
+   // a few known glyphs must be non-blank
+   auto lit=[&](char c){int n=0;for(int y=0;y<7;y++)for(int x=0;x<5;x++)if((g[c-32].rows[y]>>(4-x))&1)n++;return n;};
+   req(lit('A')>0&&lit('M')>0&&lit('0')>0,"scroller glyphs non-blank");
+   req(lit(' ')==0,"space glyph blank");}
   // Image: decode + discovery (uses the repo's UBER logo pack when present)
   { Image miss;req(!Image::loadFromFile("/nonexistent/xyz.jpg",miss),"load missing -> false");
    auto logos=findLogos("/home/ulf/privat/wireframe-scroller/UBER_Fullscreen_Logo_Pack");

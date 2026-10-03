@@ -23,12 +23,13 @@
 #include <string>
 #include <tuple>
 int main(int argc,char**argv){
-  double bpm=132.0;std::filesystem::path musicPath;bool noScroller=false;
+  double bpm=132.0;std::filesystem::path musicPath,logoOverride;bool noScroller=false;
   for(int i=1;i<argc;i++){
    std::string arg(argv[i]);
    if(arg=="--bpm"&&i+1<argc)bpm=std::max(1.0,std::atof(argv[++i]));
    else if(arg=="--music"&&i+1<argc)musicPath=argv[++i];
    else if(arg=="--no-scroller")noScroller=true;
+   else if(arg=="--logos"&&i+1<argc)logoOverride=argv[++i];
   }
  if(musicPath.empty()){
   std::filesystem::path defaultMusic="assets/music/drozerix_-_silicon_dancer.mod";
@@ -67,13 +68,15 @@ int main(int argc,char**argv){
      // The binary lives in build/, the pack in the project root. Search the
      // exe dir, then walk up to an ancestor that contains the pack (covers
      // build/ -> repo root), then the CWD.
-     std::vector<std::filesystem::path> candidates;
-     if(!exeDir.empty()) candidates.push_back(exeDir/"UBER_Fullscreen_Logo_Pack");
-     { auto p=exeDir; while(p.has_parent_path()&&p.parent_path()!=p){ p=p.parent_path(); candidates.push_back(p/"UBER_Fullscreen_Logo_Pack"); } }
-     candidates.push_back(std::filesystem::path("UBER_Fullscreen_Logo_Pack"));
-     bool loaded=false;
-     for(auto& c:candidates){ if(r.loadLogos(c.string())){ loaded=true; std::fprintf(stdout,"logos: %d cards from %s\n",r.logoCount(),c.string().c_str()); break; } }
-     if(!loaded) std::fprintf(stderr,"warning: no UBER_Fullscreen_Logo_Pack found (tried exe dir, ancestors, CWD) - running without logo background\n");
+      std::vector<std::filesystem::path> candidates;
+      if(!logoOverride.empty()) candidates.push_back(logoOverride);
+      auto cwdPack=std::filesystem::current_path()/"UBER_Fullscreen_Logo_Pack";
+      candidates.push_back(cwdPack);
+      if(!exeDir.empty()) candidates.push_back(exeDir/"UBER_Fullscreen_Logo_Pack");
+      { auto p=exeDir; while(p.has_parent_path()&&p.parent_path()!=p){ p=p.parent_path(); candidates.push_back(p/"UBER_Fullscreen_Logo_Pack"); } }
+      bool loaded=false;
+      for(auto& c:candidates){ if(r.loadLogos(c.string())){ loaded=true; std::fprintf(stdout,"logos: %d cards from %s\n",r.logoCount(),c.string().c_str()); break; } }
+      if(!loaded){ std::fprintf(stderr,"warning: no UBER_Fullscreen_Logo_Pack found; tried:\n"); for(auto& c:candidates)std::fprintf(stderr,"  %s\n",c.string().c_str()); std::fprintf(stderr,"  -> running without logo background\n"); }
     }
  Timeline timeline(bpm);SceneSystem scenes;uint64_t seed=0x49574f424a454354ull;int manual=-1,lastScene=-1,lastUploadScene=-1;bool prevL=false,prevR=false;const Mesh3* lastMesh=nullptr;std::tuple<size_t,size_t,float> lastMeshSig{0,0,-1.f};
    bool scrollerOn=!noScroller;

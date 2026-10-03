@@ -17,8 +17,8 @@ float fontPix(float g, float x, float y){
   float idx = g*7.0 + y;
   float bit = 4.0 - x;                 // MSB = leftmost column
   float v = texture(uFont, (idx + 0.5)/665.0).r;
-  float b = floor(v / (1.0 + pow(2.0, bit)));
-  return fract(b);
+  // Extract bit `bit` of byte v: (v >> bit) & 1  ==  floor(v/2^bit) mod 2.
+  return fmod(floor(v / pow(2.0, bit)), 2.0);
 }
 
 void main(){
