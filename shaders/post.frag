@@ -39,6 +39,11 @@ void main(){
   float n=fbm(p*1.7+uTime*.035);
   float n2=fbm(p*3.1+vec2(uTime*.05,-uTime*.025));
   float star=step(.996,hash(floor((p+2.)*vec2(120.,70.)+floor(uTime*.25))));
+  // Ambient dust: finer, slower, more numerous drifting motes.
+  vec2 dp=floor(p*vec2(46.,26.)+uTime*vec2(.35,.18));
+  float dh=hash(dp);
+  vec2 df=fract(p*vec2(46.,26.)+uTime*vec2(.35,.18));
+  float dust=step(.86,dh)*smoothstep(.16,.0,length(df-.5))*(.3+.5*uMusicLevel);
   float neb=pow(max(0.,n),3.)*(.10+.25*uMusicLevel);
   float grid=pow(.5+.5*sin((p.x+p.y*.35)*18.+uTime*.55),18.)*(.018+.06*uMusicLevel);
   float matrixX=pow(.5+.5*sin(p.x*32.+sin(p.y*3.2+uTime*.55)*3.0+uTime*.9),28.);
@@ -55,6 +60,7 @@ void main(){
   bg+=pal(n*.32+uTime*.015)*neb;
   bg+=pal(p.y*.08+uTime*.035+n2*.15)*aurora*(.045+.16*uMusicLevel);
   bg+=vec3(.35,.55,1.2)*(star*.22+grid);
+  bg+=vec3(.7,.8,1.0)*dust;
   bg+=pal(uTime*.04+n2*.18+length(p)*.045)*tunnel*(.08+.22*uMusicLevel);
   bg+=pal(uTime*.06+p.x*.025)*(matrixX+matrixY)*(.018+.075*uMusicLevel);
   bg+=pal(uTime*.05+.3)*glimmer;
@@ -67,6 +73,12 @@ void main(){
   hdr+=pal(length(p)*.08+uTime*.02)*pow(max(scene.r,max(scene.g,scene.b)),2.2)*(.45+uMusicLevel);
   float vign=1.-smoothstep(.55,1.85,length(p*vec2(.82,1.)));
   hdr*=max(.34,vign);
+  // Pixel-shader soft shadow: a darkened ellipse "cast" below the wireframe,
+  // breathing with the scene scale and beat. Centered slightly low.
+  float shScale=.62+.10*sin(uTime*.41)+.06*uMusicLevel;
+  vec2 sc=(p-vec2(0.,-.55))/vec2(shScale,shScale*.5);
+  float shadow=exp(-dot(sc,sc))* .38;
+  hdr*= (1.0-shadow);
   hdr+=((hash(gl_FragCoord.xy+floor(uTime*60.))-.5)*.025);
   vec3 mapped=vec3(1.)-exp(-max(hdr,0.)*(1.12+.55*uMusicLevel));
   mapped=pow(mapped,vec3(.86));
