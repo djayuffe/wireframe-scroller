@@ -4,11 +4,13 @@
 #include "Scene.hpp"
 #include "TextScroller.hpp"
 #include "Timeline.hpp"
+#include "Effects.hpp"
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <set>
+#include <vector>
 static void req(bool x,const char*m){if(!x){std::cerr<<"FAIL: "<<m<<"\n";std::exit(1);}}
 static void mesh(const Mesh3&m,const char*n,bool requireEdges=true){std::string w;req(geo::validate(m,&w),n);req(!m.v.empty(),n);if(requireEdges)req(!m.e.empty(),n);}
 int main(){
@@ -73,5 +75,68 @@ int main(){
      Image im;req(Image::loadFromFile(logos[0],im),"logo decodes");
      req(im.w==1920&&im.h==1080,"logo 1920x1080");
      req(im.rgba.size()==(size_t)1920*1080*4,"logo rgba size");}}
-  std::cout<<"geometry_tests: PASS; exact 120-cell V="<<c120.v.size()<<" E="<<c120.e.size()<<"\n";
-}
+   // Effect system: the lab's 64 CPU warpers + 24 recipes must be deterministic,
+   // finite, and fail-safe (never return an empty/invalid mesh).
+   {
+     req(effectCount()==64,"effectCount 64");
+     req(recipeCount()==24,"recipeCount 24");
+     // every single effect on a torus at several (time, amount) phases stays valid
+     for(int id=0;id<effectCount();++id){
+       EffectContext ec; ec.amount=1.0f; ec.seed=7u;
+       for(float t:{0.f,1.37f,4.2f,9.9f,20.5f}){
+         ec.time=t; ec.bass=.5f; ec.mid=.5f; ec.treble=.5f; ec.beat=(t*2.0f)/3.14159f;
+         auto m=geo::torus(24,8); bool ok=applyEffect(m,id,ec,nullptr);
+         req(ok,"effect returns valid mesh");
+         auto st=geo::stats(m); req(st.finite,"effect mesh finite");
+         req(st.indicesValid,"effect mesh in-bounds");
+       }
+       // determinism: identical inputs -> identical output
+       { auto a=geo::torus(24,8), b=geo::torus(24,8);
+         EffectContext ec; ec.time=3.14f; ec.amount=.7f; ec.seed=99u; ec.bass=.3f; ec.mid=.6f; ec.treble=.2f; ec.beat=.5f;
+         applyEffect(a,id,ec,nullptr); applyEffect(b,id,ec,nullptr);
+         bool sameV=a.v.size()==b.v.size(); for(size_t i=0;i<a.v.size()&&sameV;i++)sameV=sameV&&(a.v[i].x==b.v[i].x&&a.v[i].y==b.v[i].y&&a.v[i].z==b.v[i].z);
+         bool sameE=a.e.size()==b.e.size(); for(size_t i=0;i<a.e.size()&&sameE;i++)sameE=sameE&&(a.e[i].a==b.e[i].a&&a.e[i].b==b.e[i].b);
+         req(sameV,"effect deterministic (vertices)");
+         req(sameE,"effect deterministic (edges)"); }
+     }
+     // every curated recipe on several scenes/secondary objects stays valid.
+     // (Cheap meshes: the edge-subdivide stages are O(edges), and the lab's own
+     // matrix uses ~1000-edge objects.)
+     auto scenes=[&](){ return std::vector<Mesh3>{geo::torus(16,6),geo::cube(1.f),geo::uvSphere(8,16)}; };
+     for(int rid=0;rid<recipeCount();++rid){
+       auto r=recipe(rid); req(r.stageCount>=0&&r.stageCount<=6,"recipe stage count sane");
+       for(const auto& base:scenes()){
+         Mesh3 m=base; const Mesh3* sec=&base;
+         for(float t:{0.f,2.5f}){
+           EffectContext ec; ec.time=t; ec.amount=1.2f; ec.seed=123u+uint32_t(rid); ec.bass=.5f+.5f*std::sin(t); ec.mid=.5f+.5f*std::sin(t+1); ec.treble=.5f+.5f*std::sin(t+2); ec.beat=.5f+.5f*std::sin(t*3);
+           bool ok=applyRecipe(m,r,ec,sec);
+           auto st=geo::stats(m);
+           req(ok,"recipe applies (fail-safe)");
+           req(st.finite,"recipe mesh finite");
+           req(st.indicesValid,"recipe mesh in-bounds");
+         }
+       }
+     }
+     // procedural mutation is deterministic and bounded
+     for(uint32_t s:{0u,1u,7u,424242u,0xffffffffu}){
+       auto a=mutateRecipe(s,4), b=mutateRecipe(s,4);
+       req(a.name==b.name,"mutation name deterministic");
+       req(a.stageCount==b.stageCount&&a.stageCount==4,"mutation stage count");
+       bool same=true; for(int i=0;i<4;i++){const auto&x=a.stages[i];const auto&y=b.stages[i]; same=same&&(x.effect==y.effect&&x.amount==y.amount&&x.timeScale==y.timeScale&&x.timeOffset==y.timeOffset&&x.seedOffset==y.seedOffset);}
+       req(same,"mutation deterministic");
+       // mutated recipe must run without breaking
+       { Mesh3 m=geo::torus(24,8); EffectContext ec; ec.time=1.1f; ec.amount=1.f; ec.seed=5u; ec.bass=.5f; ec.mid=.5f; ec.treble=.5f; ec.beat=.5f;
+         auto st=geo::stats(m); req(applyRecipe(m,a,ec,nullptr),"mutation recipe applies");
+         st=geo::stats(m); req(st.finite&&st.indicesValid,"mutation mesh finite+in-bounds"); }
+     }
+     // bridge effects (36/37) need a secondary object and add vertices
+     { auto a=geo::torus(24,8), sec=geo::cube(1.f); auto before=a.v.size();
+       EffectContext ec; ec.time=1.0f; ec.amount=1.f; ec.seed=1u; ec.bass=.5f;ec.mid=.5f;ec.treble=.5f;ec.beat=.5f;
+       bool ok36=applyEffect(a,36,ec,&sec); bool ok37=applyEffect(a,37,ec,&sec);
+       req(ok36&&a.v.size()>before,"dual bridge adds vertices");
+       req(ok37,"nearest bridge valid"); }
+     // empty-mesh guard
+     { Mesh3 empty; EffectContext ec; req(!applyEffect(empty,4,ec,nullptr),"empty mesh -> false"); }
+   }
+   std::cout<<"geometry_tests: PASS; exact 120-cell V="<<c120.v.size()<<" E="<<c120.e.size()<<"\n";
+ }

@@ -8,7 +8,7 @@ class Renderer {
 public:
  bool init(GLFWwindow* w,const std::string& shaderDir="shaders");
  bool upload(const Mesh3& m);
-  bool draw(float time,int width,int height,float aspect,float scale=1.f,float lineWidth=1.f,float musicLevel=0.f);
+   bool draw(float time,int width,int height,float aspect,int sceneIndex=0,float scale=1.f,float lineWidth=1.f,float musicLevel=0.f);
   // Fullscreen beat-synced text marquee (scene name + provenance).
   bool drawScroller(float time,float beatPhase,int width,int height,const char*text,float musicLevel=0.f);
   // Logo background: load the UBER_*_1920x1080.jpg cards from a directory.
@@ -17,9 +17,12 @@ public:
   // Draw a full-screen logo backdrop behind the wireframe (crossfades on
   // scene change, subtle Ken Burns). Returns false if no logos loaded.
   bool drawBackground(float time,int width,int height,int sceneIndex,float musicLevel=0.f);
-  // Draw the traveling objects moving back and forth through the wireframe.
-  bool drawTravelers(float time,int width,int height,float aspect,float scale,float musicLevel=0.f);
-  void shutdown();
+   // Draw the traveling objects moving back and forth through the wireframe.
+   bool drawTravelers(float time,int width,int height,float aspect,float scale,float musicLevel=0.f);
+   // Logo mode: composite the fullscreen logo over the captured wireframe frame
+   // and run the post/FX pass. Called after drawTravelers in the logo path.
+   bool finishLogoFrame(float time,int width,int height,int sceneIndex,float musicLevel=0.f);
+   void shutdown();
   const std::string& error() const { return error_; }
 private:
   bool initPost(const std::string& shaderDir);
@@ -33,8 +36,8 @@ private:
   unsigned scrollerFontTex_=0;
   int uBgMix_=-1,uBgZoom_=-1,uBgAspect_=-1,uBgTexAspect_=-1,uBgOp_=-1,uBgTime_=-1,uBgMusic_=-1,uBgTexA_=-1,uBgTexB_=-1;
   int uTrMVP_=-1,uTrTime_=-1,uTrColor_=-1;
-  bool hasLogos_=false;
-  std::string error_;
+   bool hasLogos_=false; bool logoCapturePending_=false; int logoSceneIdx_=0; float logoTime_=0.f;
+   std::string error_;
   struct Logo { unsigned tex=0; int w=0,h=0; };
   std::vector<Logo> logos_;
   int bgCurrent_=-1;           // logo index currently shown in slot A

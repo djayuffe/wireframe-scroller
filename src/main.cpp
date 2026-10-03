@@ -14,6 +14,7 @@
 #include "Scene.hpp"
 #include "Timeline.hpp"
 #include "Audio.hpp"
+#include "Effects.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -79,19 +80,41 @@ int main(int argc,char**argv){
       if(!loaded){ std::fprintf(stderr,"warning: no UBER_Fullscreen_Logo_Pack found; tried:\n"); for(auto& c:candidates)std::fprintf(stderr,"  %s\n",c.string().c_str()); std::fprintf(stderr,"  -> running without logo background\n"); }
     }
  Timeline timeline(bpm);SceneSystem scenes;uint64_t seed=0x49574f424a454354ull;int manual=-1,lastScene=-1,lastUploadScene=-1;bool prevL=false,prevR=false;const Mesh3* lastMesh=nullptr;std::tuple<size_t,size_t,float> lastMeshSig{0,0,-1.f};
-   bool scrollerOn=!noScroller;
-  while(!glfwWindowShouldClose(w)){
+    bool scrollerOn=!noScroller;
+    // Per-scene effect recipe (the lab's 24 curated recipes) with an optional
+    // procedural "mutation" rotation. R toggles recipe mode, +/- cycle it.
+    bool recipeMode=false, prevF=false; int recipeChoice=0; uint32_t baseSeed=0x50454646ull;
+   while(!glfwWindowShouldClose(w)){
    double now=glfwGetTime();auto music=audio.state();double showSeconds=music.active?music.seconds:now;auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.level);int autoScene=int(sync.barIndex/2)%scenes.count();
    if(glfwGetKey(w,GLFW_KEY_T)==GLFW_PRESS){bool want=!scrollerOn;scrollerOn=want;}
   bool L=glfwGetKey(w,GLFW_KEY_LEFT)==GLFW_PRESS,R=glfwGetKey(w,GLFW_KEY_RIGHT)==GLFW_PRESS;if(L&&!prevL)manual=(manual<0?autoScene:manual)-1;if(R&&!prevR)manual=(manual<0?autoScene:manual)+1;prevL=L;prevR=R;if(manual>=0){manual=(manual%scenes.count()+scenes.count())%scenes.count();}if(glfwGetKey(w,GLFW_KEY_SPACE)==GLFW_PRESS)manual=-1;
-  int scene=manual<0?autoScene:manual;const Mesh3&m=scenes.mesh(scene,showSeconds,seed);if(scene!=lastScene){auto&si=scenes.info(scene);std::fprintf(stdout,"scene %02d: %.*s [%.*s]\n",scene,int(si.name.size()),si.name.data(),int(si.provenance.size()),si.provenance.data());lastScene=scene;}
-   auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);if(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig){if(!r.upload(m)){std::fprintf(stderr,"Mesh rejected in scene %d: %s\n",scene,r.error().c_str());break;}lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;}int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=std::max(.1f,geo::stats(m).radius);float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;
-    // 1) Logo backdrop (crossfades per scene, subtle Ken Burns).
-    r.drawBackground(float(showSeconds),W,H,scene,music.level);
-    // 2) Wireframe (improved scaling/morphing via sizeCycle + breathing).
-    if(!r.draw(float(showSeconds),W,H,float(W)/float(H),std::min(1.48f,1.92f/rad)*sizeCycle,1.f+sync.pulse,music.level)){std::fprintf(stderr,"Renderer draw failed: %s\n",r.error().c_str());break;}
-    // 3) Traveling objects weaving back and forth through the wireframe.
-    r.drawTravelers(float(showSeconds),W,H,float(W)/float(H),std::min(1.48f,1.92f/rad)*sizeCycle,music.level);
+  int scene=manual<0?autoScene:manual;Mesh3 m=scenes.mesh(scene,showSeconds,seed);if(scene!=lastScene){auto&si=scenes.info(scene);std::fprintf(stdout,"scene %02d: %.*s [%.*s]\n",scene,int(si.name.size()),si.name.data(),int(si.provenance.size()),si.provenance.data());lastScene=scene;}
+    // Toggle effect-recipe mode (R). Auto: per-scene deterministic mutation.
+    // Recipe: hold a fixed curated recipe, +/- to cycle.
+    bool F=glfwGetKey(w,GLFW_KEY_R)==GLFW_PRESS; if(F&&!prevF){recipeMode=!recipeMode; std::fprintf(stdout,"effects: %s\n",recipeMode?"recipe mode (curated, +/- to cycle)":"auto (per-scene mutation)");} prevF=F;
+    if(recipeMode){ if(glfwGetKey(w,GLFW_KEY_UP)==GLFW_PRESS)recipeChoice=(recipeChoice+1)%recipeCount(); if(glfwGetKey(w,GLFW_KEY_DOWN)==GLFW_PRESS)recipeChoice=(recipeChoice-1+recipeCount())%recipeCount(); }
+    // Drive the lab's CPU effect system from music/pulse + a rotating secondary
+    // object (feeds the bridge effects). applyRecipe restores m on any invalid
+    // stage, so a bad combo can never blank the scene.
+    {
+      EffectContext ec; ec.time=float(showSeconds); ec.amount=1.0f+.6f*float(sync.pulse); ec.beat=sync.pulse;
+      ec.bass=.5f+.5f*std::sin(float(showSeconds)*2.0f); ec.mid=.5f+.5f*std::sin(float(showSeconds)*3.3f+1.1f); ec.treble=.5f+.5f*std::sin(float(showSeconds)*5.7f+2.3f);
+      ec.seed=baseSeed+uint32_t(scene)*131u;
+      const Mesh3* secondary=m.v.empty()?nullptr:&scenes.mesh((scene+1)%scenes.count(),showSeconds,seed);
+      EffectRecipe rc=recipeMode?recipe(recipeChoice):mutateRecipe(baseSeed+uint32_t(scene)*131u,4);
+      applyRecipe(m,rc,ec,secondary);
+    }
+    auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);if(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig){if(!r.upload(m)){std::fprintf(stderr,"Mesh rejected in scene %d: %s\n",scene,r.error().c_str());break;}lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;}int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=std::max(.1f,geo::stats(m).radius);float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;
+     // 1) Logo backdrop (crossfades per scene, subtle Ken Burns). In logo mode
+     //    draw() captures wire+travelers to the HDR FBO and finishLogoFrame()
+     //    composites the logo + runs the post/FX pass over the whole frame.
+     r.drawBackground(float(showSeconds),W,H,scene,music.level);
+     // 2) Wireframe (improved scaling/morphing via sizeCycle + breathing).
+     if(!r.draw(float(showSeconds),W,H,float(W)/float(H),scene,std::min(1.48f,1.92f/rad)*sizeCycle,1.f+sync.pulse,music.level)){std::fprintf(stderr,"Renderer draw failed: %s\n",r.error().c_str());break;}
+     // 3) Traveling objects weaving back and forth through the wireframe.
+     r.drawTravelers(float(showSeconds),W,H,float(W)/float(H),std::min(1.48f,1.92f/rad)*sizeCycle,music.level);
+     // 4) Logo mode: composite logo + run the screen-space FX post pass.
+     r.finishLogoFrame(float(showSeconds),W,H,scene,music.level);
    // Fullscreen beat-synced text marquee: scene name + provenance.
    if(scrollerOn){
     auto&si=scenes.info(scene);

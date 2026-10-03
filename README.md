@@ -54,6 +54,8 @@ If OpenGL/GLFW are absent, CMake still builds `iw_geometry` and `geometry_tests`
 - Left / Right: previous / next scene and enter manual scene mode
 - Space: return to automatic beat/bar scene sequencing
 - T: toggle the text scroller
+- R: toggle the effect-recipe mode (auto per-scene mutation <-> a fixed curated recipe)
+- Up / Down: in recipe mode, cycle the 24 curated effect recipes
 - Escape: quit
 - `--bpm N`: synchronization tempo (default 132)
 - `--no-scroller`: start with the text marquee off (toggle back on with T)
@@ -69,11 +71,25 @@ The renderer composites four layers, back to front:
    drift and morphing.
 3. **Traveling objects** — 12 small octahedra weaving back and forth through
    the wireframe (depth-sorted, so they pass in front of and behind the mesh).
-4. **Text scroller** — the beat-synced marquee of the active scene's name +
+4. **Effect warp** — the CPU effect system (64 vertex-warper effects + 24
+   curated multi-stage recipes + a deterministic procedural "mutation"
+   generator) re-shapes the active mesh every frame, driven by the music
+   pulse and synthetic bass/mid/treble/beat bands. In auto mode each scene
+   gets its own deterministic mutation; press R for a fixed recipe and
+   Up/Down to cycle. The system is fail-safe: any stage that leaves the mesh
+   empty or invalid restores the previous frame, so a bad combo never blanks
+   the scene.
+5. **Screen-space FX (post pass)** — the Uber compositor's signature effects
+   run over the combined logo + wireframe + travelers frame: gravitational
+   lensing (1/r^2), a refractive shockwave ring, chromatic aberration, barrel
+   breathing, an SDF nested-triangle energy sculpture, holographic spectral
+   interference, beat-gated glitch slices, scanlines, film grain, and an ACES
+   filmic tone map — all reactive to the beat/music level.
+6. **Text scroller** — the beat-synced marquee of the active scene's name +
    provenance (on by default; toggle with T).
 
-All three new layers are best-effort: if a shader fails to compile or the logo
-pack is missing, the app degrades (no background / no travelers) rather than
+All layers are best-effort: if a shader fails to compile or the logo pack is
+missing, the app degrades (no background / no travelers / no FX) rather than
 crashing.
 
 ## Music
@@ -95,9 +111,16 @@ Project targets compile with `-Wall -Wextra -Wpedantic -Werror` (or `/W4 /WX`). 
 - `AdvancedGeometry.*`: TPMS extraction, dual 120-cell, quaternion boundary lattice, hyperbolic visualization, attractors, v4 exotic families, unknown-lab adapters and deterministic discovery.
 - `Scene.*`: scene catalogue, provenance and update-rate cache. Expensive implicit/fractal geometry is not rebuilt at video refresh rate.
 - `Timeline.*`: deterministic BPM/beat/bar synchronization.
-- `Renderer.*`: OpenGL 4.1 indexed line renderer with checked external GLSL compilation/linking, reusable buffers, RGBA16F HDR render target, shader composite, breathing size cycle, zoom/flyover camera choreography and guarded framebuffer setup.
+- `Effects.*`: 64 CPU vertex-warper effects, 24 curated multi-stage recipes and
+  a deterministic procedural recipe generator, driven by time + synthetic
+  audio bands; fail-safe (restores the mesh on any invalid stage). Ported from
+  the unknown-wireframe-lab v5/v6 compositor.
+- `Renderer.*`: OpenGL 4.1 indexed line renderer with checked external GLSL compilation/linking, reusable buffers, RGBA16F HDR render target, shader composite, breathing size cycle, zoom/flyover camera choreography and guarded framebuffer setup. In logo mode the frame (logo + wireframe + travelers) is captured to the HDR target and passed through the post/FX shader.
 - `shaders/post.*`: RGBA16F HDR-style composite pass with procedural background,
-  glimmer, bloom-like highlight shaping, tone mapping and music-reactive light.
+  glimmer, bloom-like highlight shaping, plus the Uber-compositor screen-space
+  FX (gravitational lensing, refractive shockwave, chromatic aberration,
+  barrel breathing, SDF triangle, holographic interference, glitch slices,
+  scanlines, grain, ACES tone map) and music-reactive light.
 - `shaders/wire.*`: object-space wire color cycling, lighting-matrix bands and
   music-reactive electric edge highlights.
 
