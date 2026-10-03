@@ -53,8 +53,27 @@ If OpenGL/GLFW are absent, CMake still builds `iw_geometry` and `geometry_tests`
 ## Controls
 - Left / Right: previous / next scene and enter manual scene mode
 - Space: return to automatic beat/bar scene sequencing
+- T: toggle the text scroller
 - Escape: quit
 - `--bpm N`: synchronization tempo (default 132)
+
+## Visual layers
+The renderer composites four layers, back to front:
+1. **Logo backdrop** — the 20 `UBER_Fullscreen_Logo_Pack/UBER_*_1920x1080.jpg`
+   cards as a full-screen texture. It crossfades as the scene changes and has a
+   subtle Ken Burns zoom + beat-reactive brightness. Cards are found
+   automatically relative to the executable (or CWD), so the folder just needs
+   to sit next to the binary.
+2. **Wireframe** — the 51 scenes with beat-reactive breathing scale, camera
+   drift and morphing.
+3. **Traveling objects** — 12 small octahedra weaving back and forth through
+   the wireframe (depth-sorted, so they pass in front of and behind the mesh).
+4. **Text scroller** — the beat-synced marquee of the active scene's name +
+   provenance (on by default; toggle with T).
+
+All three new layers are best-effort: if a shader fails to compile or the logo
+pack is missing, the app degrades (no background / no travelers) rather than
+crashing.
 
 ## Music
 
