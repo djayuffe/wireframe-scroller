@@ -16,6 +16,7 @@
 #include "Audio.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -47,9 +48,9 @@ int main(int argc,char**argv){
   std::string shaderDir="shaders";
   { // B3 fix: resolve shaders relative to the executable, not the CWD
    std::filesystem::path exe;
-    #if defined(__APPLE__)
-    { char buf[4096]; size_t sz=sizeof(buf);
-      if(_NSGetExecutablePath(buf,&sz)==0){ std::error_code ec; exe=std::filesystem::canonical(buf,ec); } }
+     #if defined(__APPLE__)
+     { char buf[4096]; uint32_t sz=sizeof(buf);
+       if(_NSGetExecutablePath(buf,&sz)==0){ std::error_code ec; exe=std::filesystem::canonical(buf,ec); } }
     #elif defined(__linux__)
     { std::error_code ec; exe=std::filesystem::canonical("/proc/self/exe",ec); }
     #endif
