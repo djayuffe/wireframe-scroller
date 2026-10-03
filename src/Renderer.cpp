@@ -65,9 +65,10 @@ bool Renderer::initTravelers(const std::string&dir){std::string vs=readText(dir+
   glBufferData(GL_ELEMENT_ARRAY_BUFFER,idx.size()*sizeof(uint32_t),idx.data(),GL_STATIC_DRAW);
   glBindVertexArray(0);
   return true;}
-bool Renderer::initScroller(const std::string&dir){std::string vs=readText(dir+"/scroller.vert"),fs=readText(dir+"/scroller.frag");if(vs.empty()||fs.empty()){error_="cannot read scroller shaders";return false;}scrollerProgram_=linkProgram(vs,fs,error_);if(!scrollerProgram_)return false;uScTime_=glGetUniformLocation(scrollerProgram_,"uTime");uScPhase_=glGetUniformLocation(scrollerProgram_,"uBeatPhase");uScRes_=glGetUniformLocation(scrollerProgram_,"uResolution");uScMusic_=glGetUniformLocation(scrollerProgram_,"uMusicLevel");uScOffset_=glGetUniformLocation(scrollerProgram_,"uScrollOffset");uScTextWidth_=glGetUniformLocation(scrollerProgram_,"uTextWidth");uScFont_=glGetUniformLocation(scrollerProgram_,"uFont");glGenVertexArrays(1,&scrollerVao_);GLuint tex=0;glGenTextures(1,&tex);glBindTexture(GL_TEXTURE_1D,tex);auto data=textfont::pack();glTexImage1D(GL_TEXTURE_1D,0,GL_R8,(GLsizei)data.size(),0,GL_RED,GL_UNSIGNED_BYTE,data.data());glTexParameteri(GL_TEXTURE_1D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_1D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_1D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glUseProgram(scrollerProgram_);if(uScFont_>=0)glUniform1i(uScFont_,1);glBindTexture(GL_TEXTURE_1D,0);glActiveTexture(GL_TEXTURE0);return true;}
-bool Renderer::initPost(const std::string&dir){std::string vs=readText(dir+"/post.vert"),fs=readText(dir+"/post.frag");if(vs.empty()||fs.empty()){error_="cannot read post shaders from "+dir;return false;}postProgram_=linkProgram(vs,fs,error_);if(!postProgram_)return false;uPostScene_=glGetUniformLocation(postProgram_,"uScene");uPostTime_=glGetUniformLocation(postProgram_,"uTime");uPostResolution_=glGetUniformLocation(postProgram_,"uResolution");uPostMusic_=glGetUniformLocation(postProgram_,"uMusicLevel");glUseProgram(postProgram_);if(uPostScene_>=0)glUniform1i(uPostScene_,0);return true;}
+bool Renderer::initScroller(const std::string&dir){std::string vs=readText(dir+"/scroller.vert"),fs=readText(dir+"/scroller.frag");if(vs.empty()||fs.empty()){error_="cannot read scroller shaders";return false;}scrollerProgram_=linkProgram(vs,fs,error_);if(!scrollerProgram_)return false;uScTime_=glGetUniformLocation(scrollerProgram_,"uTime");uScPhase_=glGetUniformLocation(scrollerProgram_,"uBeatPhase");uScRes_=glGetUniformLocation(scrollerProgram_,"uResolution");uScMusic_=glGetUniformLocation(scrollerProgram_,"uMusicLevel");uScOffset_=glGetUniformLocation(scrollerProgram_,"uScrollOffset");uScTextWidth_=glGetUniformLocation(scrollerProgram_,"uTextWidth");uScFont_=glGetUniformLocation(scrollerProgram_,"uFont");uScOpacity_=glGetUniformLocation(scrollerProgram_,"uOpacity");glGenVertexArrays(1,&scrollerVao_);glGenTextures(1,&scrollerFontTex_);glBindTexture(GL_TEXTURE_1D,scrollerFontTex_);auto data=textfont::pack();glTexImage1D(GL_TEXTURE_1D,0,GL_R8,(GLsizei)data.size(),0,GL_RED,GL_UNSIGNED_BYTE,data.data());glTexParameteri(GL_TEXTURE_1D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_1D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_1D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glBindTexture(GL_TEXTURE_1D,0);return true;}
+bool Renderer::initPost(const std::string&dir){std::string vs=readText(dir+"/post.vert"),fs=readText(dir+"/post.frag");if(vs.empty()||fs.empty()){error_="cannot read post shaders from "+dir;return false;}postProgram_=linkProgram(vs,fs,error_);if(!postProgram_)return false;uPostScene_=glGetUniformLocation(postProgram_,"uScene");uPostTime_=glGetUniformLocation(postProgram_,"uTime");uPostResolution_=glGetUniformLocation(postProgram_,"uResolution");uPostMusic_=glGetUniformLocation(postProgram_,"uMusicLevel");uPostLogo_=glGetUniformLocation(postProgram_,"uLogo");glUseProgram(postProgram_);if(uPostScene_>=0)glUniform1i(uPostScene_,0);if(uPostLogo_>=0)glUniform1i(uPostLogo_,1);return true;}
 bool Renderer::resizeHdr(int width,int height){width=std::max(1,width);height=std::max(1,height);if(width==hdrW_&&height==hdrH_&&hdrFbo_)return true;hdrW_=width;hdrH_=height;if(!hdrFbo_)glGenFramebuffers(1,&hdrFbo_);if(!hdrTex_)glGenTextures(1,&hdrTex_);if(!depthRbo_)glGenRenderbuffers(1,&depthRbo_);glBindTexture(GL_TEXTURE_2D,hdrTex_);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA16F,width,height,0,GL_RGBA,GL_FLOAT,nullptr);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);glBindRenderbuffer(GL_RENDERBUFFER,depthRbo_);glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT24,width,height);glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,hdrTex_,0);glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,depthRbo_);if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE){error_="HDR framebuffer incomplete";glBindFramebuffer(GL_FRAMEBUFFER,0);return false;}glBindFramebuffer(GL_FRAMEBUFFER,0);return true;}
+bool Renderer::resizeLogo(int width,int height){width=std::max(1,width);height=std::max(1,height);if(!hasLogos_)return true;if(width==hdrW_&&height==hdrH_&&logoFbo_)return true;if(!logoFbo_)glGenFramebuffers(1,&logoFbo_);if(!logoTex_)glGenTextures(1,&logoTex_);if(!logoDepth_)glGenRenderbuffers(1,&logoDepth_);glBindTexture(GL_TEXTURE_2D,logoTex_);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,width,height,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);glBindRenderbuffer(GL_RENDERBUFFER,logoDepth_);glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT24,width,height);glBindFramebuffer(GL_FRAMEBUFFER,logoFbo_);glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,logoTex_,0);glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,logoDepth_);glBindFramebuffer(GL_FRAMEBUFFER,0);return true;}
 bool Renderer::upload(const Mesh3&m){std::string why;if(!geo::validate(m,&why)){error_=why;return false;}std::vector<uint32_t>ix;ix.reserve(m.e.size()*2);for(auto e:m.e){ix.push_back(e.a);ix.push_back(e.b);}edgeCount_=(int)ix.size();glBindVertexArray(vao_);glBindBuffer(GL_ARRAY_BUFFER,vbo_);size_t vb=m.v.size()*sizeof(V3);if(vb>vboCapacity_){vboCapacity_=std::max(vb,vboCapacity_*2+4096);glBufferData(GL_ARRAY_BUFFER,vboCapacity_,nullptr,GL_DYNAMIC_DRAW);}if(vb)glBufferSubData(GL_ARRAY_BUFFER,0,vb,m.v.data());glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(V3),nullptr);glEnableVertexAttribArray(0);glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo_);size_t eb=ix.size()*sizeof(uint32_t);if(eb>eboCapacity_){eboCapacity_=std::max(eb,eboCapacity_*2+4096);glBufferData(GL_ELEMENT_ARRAY_BUFFER,eboCapacity_,nullptr,GL_DYNAMIC_DRAW);}if(eb)glBufferSubData(GL_ELEMENT_ARRAY_BUFFER,0,eb,ix.data());return true;}
 bool Renderer::draw(float t,int width,int height,float aspect,float scale,float lineWidth,float musicLevel){if(!resizeHdr(width,height))return false;float ml=std::clamp(musicLevel,0.f,1.f);
  float fly=std::sin(t*.19f),zoom=std::sin(t*.23f+1.7f),breath=1.f+.075f*std::sin(t*.83f)+.12f*ml;
@@ -76,7 +77,7 @@ bool Renderer::draw(float t,int width,int height,float aspect,float scale,float 
  float cy=std::cos(t*.17f),sy=std::sin(t*.17f),cx=std::cos(.27f*std::sin(t*.11f)),sx=std::sin(.27f*std::sin(t*.11f));
  Ry[0]=cy*scale*breath;Ry[2]=-sy*scale*breath;Ry[8]=sy*scale*breath;Ry[10]=cy*scale*breath;Ry[5]=scale*breath;
  Rx[5]=cx;Rx[6]=sx;Rx[9]=-sx;Rx[10]=cx;
- perspective(P,(52.f+3.f*std::sin(t*.07f)-2.f*ml)*3.14159265f/180.f,std::max(.05f,aspect),.05f,100.f);mul(R,Ry,Rx);mul(X,V,R);mul(M,P,X);glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);glViewport(0,0,width,height);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);glEnable(GL_DEPTH_TEST);glUseProgram(program_);glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);glUniform1f(uTime_,t);if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);glLineWidth(std::max(1.f,lineWidth+ml*.75f));glBindVertexArray(vao_);glDrawElements(GL_LINES,edgeCount_,GL_UNSIGNED_INT,nullptr);glBindFramebuffer(GL_FRAMEBUFFER,0);glDisable(GL_DEPTH_TEST);glUseProgram(postProgram_);glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,hdrTex_);if(uPostTime_>=0)glUniform1f(uPostTime_,t);if(uPostResolution_>=0)glUniform2f(uPostResolution_,float(width),float(height));if(uPostMusic_>=0)glUniform1f(uPostMusic_,ml);glBindVertexArray(postVao_);glDrawArrays(GL_TRIANGLES,0,3);return true;}
+ perspective(P,(52.f+3.f*std::sin(t*.07f)-2.f*ml)*3.14159265f/180.f,std::max(.05f,aspect),.05f,100.f);mul(R,Ry,Rx);mul(X,V,R);mul(M,P,X);glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);glViewport(0,0,width,height);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);glEnable(GL_DEPTH_TEST);glUseProgram(program_);glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);glUniform1f(uTime_,t);if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);glLineWidth(std::max(1.f,lineWidth+ml*.75f));glBindVertexArray(vao_);glDrawElements(GL_LINES,edgeCount_,GL_UNSIGNED_INT,nullptr);glBindFramebuffer(GL_FRAMEBUFFER,0);glDisable(GL_DEPTH_TEST);glUseProgram(postProgram_);glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,hdrTex_);if(uPostTime_>=0)glUniform1f(uPostTime_,t);if(uPostResolution_>=0)glUniform2f(uPostResolution_,float(width),float(height));if(uPostMusic_>=0)glUniform1f(uPostMusic_,ml);if(uPostLogo_>=0){glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,hasLogos_?logoTex_:hdrTex_);glUniform1f(uPostLogo_,hasLogos_?1.f:0.f);}glActiveTexture(GL_TEXTURE0);glBindVertexArray(postVao_);glDrawArrays(GL_TRIANGLES,0,3);return true;}
 bool Renderer::loadLogos(const std::string&dir){
   auto files=findLogos(dir);
   if(files.empty())return false;
@@ -98,11 +99,15 @@ bool Renderer::loadLogos(const std::string&dir){
   }
   glBindTexture(GL_TEXTURE_2D,0);
   if(logos_.empty())return false;
+  hasLogos_=true;
   bgCurrent_=0;bgTarget_=0;bgMix_=0.f;
+  bgTexA_=logos_[0].tex;bgTexB_=logos_[0].tex;
   return true;
 }
+// Render the logo backdrop into logoFbo_ (sampled by the post pass as uLogo).
 bool Renderer::drawBackground(float time,int width,int height,int sceneIndex,float musicLevel){
   if(!bgProgram_||logos_.empty())return false;
+  if(!resizeLogo(width,height))return false;
   int target=(logos_.size()>1)?(sceneIndex%(int)logos_.size()):0;
   // When the target logo changes, swap it into slot B and start fading.
   if(target!=bgTarget_){
@@ -142,10 +147,13 @@ bool Renderer::drawBackground(float time,int width,int height,int sceneIndex,flo
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D,bgTexB_);
   if(uBgTexB_>=0)glUniform1i(uBgTexB_,1);
+  glBindFramebuffer(GL_FRAMEBUFFER,logoFbo_);
   glDisable(GL_DEPTH_TEST);
   glViewport(0,0,width,height);
+  glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
   glBindVertexArray(bgVao_);
   glDrawArrays(GL_TRIANGLES,0,3);
+  glBindFramebuffer(GL_FRAMEBUFFER,0);
   glActiveTexture(GL_TEXTURE0);
   return true;
 }
@@ -185,16 +193,9 @@ bool Renderer::drawScroller(float time,float beatPhase,int width,int height,cons
   if(uScMusic_>=0)glUniform1f(uScMusic_,std::clamp(musicLevel,0.f,1.f));
   if(uScOffset_>=0)glUniform1f(uScOffset_,offset);
   if(uScTextWidth_>=0)glUniform1f(uScTextWidth_,textWidth);
+  if(uScOpacity_>=0)glUniform1f(uScOpacity_,0.95f);
   glActiveTexture(GL_TEXTURE1);
-  // Re-upload font texture (cheap, 665 bytes).
-  static GLuint fontTex=0;
-  if(!fontTex)glGenTextures(1,&fontTex);
-  glBindTexture(GL_TEXTURE_1D,fontTex);
-  auto data=textfont::pack();
-  glTexImage1D(GL_TEXTURE_1D,0,GL_R8,(GLsizei)data.size(),0,GL_RED,GL_UNSIGNED_BYTE,data.data());
-  glTexParameteri(GL_TEXTURE_1D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_1D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_1D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+  glBindTexture(GL_TEXTURE_1D,scrollerFontTex_);
   if(uScFont_>=0)glUniform1i(uScFont_,1);
   glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
   glDisable(GL_DEPTH_TEST);
@@ -203,6 +204,7 @@ bool Renderer::drawScroller(float time,float beatPhase,int width,int height,cons
   glDrawArrays(GL_TRIANGLES,0,3);
   glDisable(GL_BLEND);
   glActiveTexture(GL_TEXTURE0);
+  glActiveTexture(GL_TEXTURE0);
   return true;
 }
-void Renderer::shutdown(){for(auto&L:logos_)if(L.tex)glDeleteTextures(1,&L.tex);logos_.clear();if(hdrFbo_)glDeleteFramebuffers(1,&hdrFbo_);if(hdrTex_)glDeleteTextures(1,&hdrTex_);if(depthRbo_)glDeleteRenderbuffers(1,&depthRbo_);if(postProgram_)glDeleteProgram(postProgram_);if(postVao_)glDeleteVertexArrays(1,&postVao_);if(scrollerProgram_)glDeleteProgram(scrollerProgram_);if(scrollerVao_)glDeleteVertexArrays(1,&scrollerVao_);if(bgProgram_)glDeleteProgram(bgProgram_);if(bgVao_)glDeleteVertexArrays(1,&bgVao_);if(travelerProgram_)glDeleteProgram(travelerProgram_);if(travelerVao_)glDeleteVertexArrays(1,&travelerVao_);if(travelerVbo_)glDeleteBuffers(1,&travelerVbo_);if(travelerEbo_)glDeleteBuffers(1,&travelerEbo_);if(program_)glDeleteProgram(program_);if(ebo_)glDeleteBuffers(1,&ebo_);if(vbo_)glDeleteBuffers(1,&vbo_);if(vao_)glDeleteVertexArrays(1,&vao_);program_=postProgram_=scrollerProgram_=bgProgram_=travelerProgram_=vao_=postVao_=scrollerVao_=bgVao_=travelerVao_=vbo_=ebo_=travelerVbo_=travelerEbo_=hdrFbo_=hdrTex_=depthRbo_=0;}
+void Renderer::shutdown(){for(auto&L:logos_)if(L.tex)glDeleteTextures(1,&L.tex);logos_.clear();if(logoFbo_)glDeleteFramebuffers(1,&logoFbo_);if(logoTex_)glDeleteTextures(1,&logoTex_);if(logoDepth_)glDeleteRenderbuffers(1,&logoDepth_);if(scrollerFontTex_)glDeleteTextures(1,&scrollerFontTex_);if(hdrFbo_)glDeleteFramebuffers(1,&hdrFbo_);if(hdrTex_)glDeleteTextures(1,&hdrTex_);if(depthRbo_)glDeleteRenderbuffers(1,&depthRbo_);if(postProgram_)glDeleteProgram(postProgram_);if(postVao_)glDeleteVertexArrays(1,&postVao_);if(scrollerProgram_)glDeleteProgram(scrollerProgram_);if(scrollerVao_)glDeleteVertexArrays(1,&scrollerVao_);if(bgProgram_)glDeleteProgram(bgProgram_);if(bgVao_)glDeleteVertexArrays(1,&bgVao_);if(travelerProgram_)glDeleteProgram(travelerProgram_);if(travelerVao_)glDeleteVertexArrays(1,&travelerVao_);if(travelerVbo_)glDeleteBuffers(1,&travelerVbo_);if(travelerEbo_)glDeleteBuffers(1,&travelerEbo_);if(program_)glDeleteProgram(program_);if(ebo_)glDeleteBuffers(1,&ebo_);if(vbo_)glDeleteBuffers(1,&vbo_);if(vao_)glDeleteVertexArrays(1,&vao_);program_=postProgram_=scrollerProgram_=bgProgram_=travelerProgram_=vao_=postVao_=scrollerVao_=bgVao_=travelerVao_=vbo_=ebo_=travelerVbo_=travelerEbo_=logoFbo_=logoTex_=logoDepth_=scrollerFontTex_=hdrFbo_=hdrTex_=depthRbo_=0;}

@@ -61,12 +61,19 @@ int main(int argc,char**argv){
      if(std::filesystem::exists(cand/"wire.vert")) shaderDir=cand.string();
     }
    }
-    Renderer r;if(!r.init(w,shaderDir)){std::fprintf(stderr,"Renderer init failed: %s\n",r.error().c_str());audio.close();glfwDestroyWindow(w);glfwTerminate();return 3;}
-   { // Load the UBER fullscreen logo pack as the animated background.
-    std::filesystem::path logoDir=exeDir.empty()?std::filesystem::path("UBER_Fullscreen_Logo_Pack"):exeDir/"UBER_Fullscreen_Logo_Pack";
-    if(!std::filesystem::exists(logoDir)) logoDir=std::filesystem::path("UBER_Fullscreen_Logo_Pack");
-    if(r.loadLogos(logoDir.string())) std::fprintf(stdout,"logos: %d cards loaded\n",r.logoCount());
-   }
+     Renderer r;if(!r.init(w,shaderDir)){std::fprintf(stderr,"Renderer init failed: %s\n",r.error().c_str());audio.close();glfwDestroyWindow(w);glfwTerminate();return 3;}
+    { // Load the UBER fullscreen logo pack as the animated background.
+     // The binary lives in build/, the pack in the project root. Search the
+     // exe dir, then walk up to an ancestor that contains the pack (covers
+     // build/ -> repo root), then the CWD.
+     std::vector<std::filesystem::path> candidates;
+     if(!exeDir.empty()) candidates.push_back(exeDir/"UBER_Fullscreen_Logo_Pack");
+     { auto p=exeDir; while(p.has_parent_path()&&p.parent_path()!=p){ p=p.parent_path(); candidates.push_back(p/"UBER_Fullscreen_Logo_Pack"); } }
+     candidates.push_back(std::filesystem::path("UBER_Fullscreen_Logo_Pack"));
+     bool loaded=false;
+     for(auto& c:candidates){ if(r.loadLogos(c.string())){ loaded=true; std::fprintf(stdout,"logos: %d cards from %s\n",r.logoCount(),c.string().c_str()); break; } }
+     if(!loaded) std::fprintf(stderr,"warning: no UBER_Fullscreen_Logo_Pack found (tried exe dir, ancestors, CWD) - running without logo background\n");
+    }
  Timeline timeline(bpm);SceneSystem scenes;uint64_t seed=0x49574f424a454354ull;int manual=-1,lastScene=-1,lastUploadScene=-1;bool prevL=false,prevR=false;const Mesh3* lastMesh=nullptr;std::tuple<size_t,size_t,float> lastMeshSig{0,0,-1.f};
   bool scrollerOn=true;
   while(!glfwWindowShouldClose(w)){
