@@ -2,8 +2,6 @@
 in vec2 uv;
 out vec4 FragColor;
 uniform sampler2D uScene;
-uniform sampler2D uLogo;
-uniform float uLogoMix;    // 0 = no logo, 1 = full logo
 uniform vec2 uResolution;
 uniform float uTime;
 uniform float uMusicLevel;
@@ -65,10 +63,6 @@ void main(){
   bg+=pal(uTime*.06+p.x*.025)*(matrixX+matrixY)*(.018+.075*uMusicLevel);
   bg+=pal(uTime*.05+.3)*glimmer;
 
-  // Blend the UBER logo backdrop over the procedural background. The logo is
-  // a dimmed full-frame texture; the wireframe + bloom still sit on top.
-  vec3 logo=texture(uLogo,uv).rgb;
-  bg=mix(bg,logo*1.35+bg*.25,uLogoMix);
   vec3 hdr=bg+scene*1.35+bloom*(.55+uMusicLevel*1.15);
   hdr+=pal(length(p)*.08+uTime*.02)*pow(max(scene.r,max(scene.g,scene.b)),2.2)*(.45+uMusicLevel);
   float vign=1.-smoothstep(.55,1.85,length(p*vec2(.82,1.)));
