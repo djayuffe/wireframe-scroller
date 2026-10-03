@@ -1,5 +1,7 @@
 #include "Geometry.hpp"
 #include "AdvancedGeometry.hpp"
+#include "Scene.hpp"
+#include "TextScroller.hpp"
 #include "Timeline.hpp"
 #include <cmath>
 #include <cstdlib>
@@ -19,7 +21,33 @@ int main(){
  mesh(geo::mobiusStrip(32,8),"mobius");mesh(geo::kleinBottle(32,12),"klein");mesh(geo::enneperSurface(24,12),"enneper");mesh(geo::helicoidSurface(24,12),"helicoid");mesh(geo::catenoidSurface(24,12),"catenoid");mesh(geo::diniSurface(24,12),"dini");mesh(geo::pseudosphere(24,12),"pseudosphere");mesh(geo::romanSurface(24,12),"roman");mesh(geo::crossCap(24,12),"crosscap");mesh(geo::torusKnot(120,3,7),"torus knot");mesh(geo::vivianiCurve(100),"viviani");mesh(geo::sphericalSpiral(100),"spherical spiral");mesh(geo::hypotrochoidKnot(120),"hypotrochoid");mesh(geo::duffingAttractor(1200),"duffing");mesh(geo::rosslerAttractor(1200),"rossler");mesh(geo::thomasAttractor(1200),"thomas");mesh(geo::sierpinskiTetrahedron(3),"sierpinski");
  for(auto k:{geo::ExoticImplicitKind::Heart,geo::ExoticImplicitKind::BarthSexticLike,geo::ExoticImplicitKind::TangleCube,geo::ExoticImplicitKind::ChmutovLike,geo::ExoticImplicitKind::CayleyCubic,geo::ExoticImplicitKind::KummerLike,geo::ExoticImplicitKind::Goursat,geo::ExoticImplicitKind::BlobLattice})mesh(geo::exoticImplicit(k,12),"exotic implicit");
  for(unsigned i=0;i<geo::unknownLabCount();++i)mesh(geo::unknownLabObject(i,24,.3f),geo::unknownLabName(i).c_str());
- req(geo::noveltyScore(geo::discoveredObject(1,24,12))>0,"novelty finite positive");
- Timeline tl(120);auto s=tl.sample(.5);req(s.beatIndex==1&&std::fabs(s.beatPhase)<.001f,"timeline beat");req(s.barIndex==0&&s.barPhase>.24f&&s.barPhase<.26f,"timeline bar");
- std::cout<<"geometry_tests: PASS; exact 120-cell V="<<c120.v.size()<<" E="<<c120.e.size()<<"\n";
+  req(geo::noveltyScore(geo::discoveredObject(1,24,12))>0,"novelty finite positive");
+  Timeline tl(120);auto s=tl.sample(.5);req(s.beatIndex==1&&std::fabs(s.beatPhase)<.001f,"timeline beat");req(s.barIndex==0&&s.barPhase>.24f&&s.barPhase<.26f,"timeline bar");
+  // B18: scene-table consistency
+  { SceneSystem ss;req(ss.count()==51,"scene count 51");
+    for(int i=0;i<ss.count();++i){auto&si=ss.info(i);req(si.id==i,"scene id==index");req(!si.name.empty(),"scene name non-empty");
+      req(si.dynamic?si.updateHz>0:true,"scene updateHz sane");
+      const auto&m=ss.mesh(i,0.0,42);req(!m.v.empty(),"scene mesh non-empty");
+      // B7: same tick -> same mesh pointer (cache hit)
+      const auto&m2=ss.mesh(i,0.0,42);req(&m==&m2,"scene cache hit same tick");}
+    // B7: static scene tick is always 0
+    req(SceneSystem::tickFor(ss.info(6),99.0)==0,"static scene tick=0");
+    // B7: dynamic scene tick advances with time (scene 2 = 6 Hz, use 0.2s = 1.2 ticks)
+    req(SceneSystem::tickFor(ss.info(2),0.2)>SceneSystem::tickFor(ss.info(2),0.0),"dynamic tick advances");}
+  // Text scroller: font + scroll math
+  { req(textfont::glyphCount()==95,"font 95 glyphs");
+    req(textfont::width()==5&&textfont::height()==7,"font 5x7");
+    auto p=textfont::pack();req(p.size()==95*7,"font pack 665 bytes");
+    req(textfont::measure("")==0,"measure empty 0");
+    req(textfont::measure("ABCDE")==5*5+4,"measure ABCDE=29"); // 5*(5+1)-1
+    req(scrollOffset(0.0f,0.f,100.f,50.f)==0.f,"scroll t=0 -> 0");
+    // scroll is always in [0, wrap) and non-negative
+    float wrap=100.f+50.f;
+    for(double t=0;t<60;t+=0.13){float o=scrollOffset(t,0.f,100.f,50.f);
+      req(o>=0.f&&o<wrap,"scroll in [0,wrap)");}
+    // over time the offset must advance (hit a non-zero value at some t)
+    bool advanced=false;
+    for(double t=0;t<60;t+=0.01){if(scrollOffset(t,0.f,100.f,50.f)>0.f){advanced=true;break;}}
+    req(advanced,"scroll advances over time");}
+  std::cout<<"geometry_tests: PASS; exact 120-cell V="<<c120.v.size()<<" E="<<c120.e.size()<<"\n";
 }
