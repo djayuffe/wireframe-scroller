@@ -22,7 +22,19 @@ unknown-lab procedural wire objects.
 `data/object_catalog.csv` records provenance. The hyperbolic and quaternion scenes are visualizations, not claimed canonical honeycomb/fractal meshes.
 
 ## Build
-macOS (Homebrew):
+The build system is CMake. A `Makefile` wraps it for convenience — the
+simplest path is just:
+
+```sh
+make            # configure + build (Release)
+make test       # build + run the geometry/scroller tests
+make run        # build + launch (default music, 132 bpm)
+make run-pulse  # launch with the CC0 Wireframe Pulse track
+make clean      # remove the build/ directory
+```
+
+Or use CMake directly (macOS via Homebrew):
+
 ```sh
 brew install cmake glfw
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -30,7 +42,11 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ./build/impossible_wireframe --bpm 132
 ```
-Linux: install a C++20 compiler, CMake, OpenGL development headers and GLFW3 development package, then use the same CMake commands.
+
+Optional audio playback (libopenmpt + SDL2) is detected automatically; on
+macOS add `brew install sdl2 libopenmpt`. Linux: install a C++20 compiler,
+CMake, OpenGL development headers and GLFW3 development package, then use the
+same commands (or `make`).
 
 If OpenGL/GLFW are absent, CMake still builds `iw_geometry` and `geometry_tests`, allowing headless CI validation.
 
