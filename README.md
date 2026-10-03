@@ -56,6 +56,7 @@ If OpenGL/GLFW are absent, CMake still builds `iw_geometry` and `geometry_tests`
 - T: toggle the text scroller
 - Escape: quit
 - `--bpm N`: synchronization tempo (default 132)
+- `--no-scroller`: start with the text marquee off (toggle back on with T)
 
 ## Visual layers
 The renderer composites four layers, back to front:

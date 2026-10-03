@@ -23,12 +23,13 @@
 #include <string>
 #include <tuple>
 int main(int argc,char**argv){
- double bpm=132.0;std::filesystem::path musicPath;
- for(int i=1;i<argc;i++){
-  std::string arg(argv[i]);
-  if(arg=="--bpm"&&i+1<argc)bpm=std::max(1.0,std::atof(argv[++i]));
-  else if(arg=="--music"&&i+1<argc)musicPath=argv[++i];
- }
+  double bpm=132.0;std::filesystem::path musicPath;bool noScroller=false;
+  for(int i=1;i<argc;i++){
+   std::string arg(argv[i]);
+   if(arg=="--bpm"&&i+1<argc)bpm=std::max(1.0,std::atof(argv[++i]));
+   else if(arg=="--music"&&i+1<argc)musicPath=argv[++i];
+   else if(arg=="--no-scroller")noScroller=true;
+  }
  if(musicPath.empty()){
   std::filesystem::path defaultMusic="assets/music/drozerix_-_silicon_dancer.mod";
   if(std::filesystem::exists(defaultMusic)) musicPath=defaultMusic;
@@ -75,7 +76,7 @@ int main(int argc,char**argv){
      if(!loaded) std::fprintf(stderr,"warning: no UBER_Fullscreen_Logo_Pack found (tried exe dir, ancestors, CWD) - running without logo background\n");
     }
  Timeline timeline(bpm);SceneSystem scenes;uint64_t seed=0x49574f424a454354ull;int manual=-1,lastScene=-1,lastUploadScene=-1;bool prevL=false,prevR=false;const Mesh3* lastMesh=nullptr;std::tuple<size_t,size_t,float> lastMeshSig{0,0,-1.f};
-  bool scrollerOn=true;
+   bool scrollerOn=!noScroller;
   while(!glfwWindowShouldClose(w)){
    double now=glfwGetTime();auto music=audio.state();double showSeconds=music.active?music.seconds:now;auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.level);int autoScene=int(sync.barIndex/2)%scenes.count();
    if(glfwGetKey(w,GLFW_KEY_T)==GLFW_PRESS){bool want=!scrollerOn;scrollerOn=want;}
