@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 #ifdef __APPLE__
 #include <OpenGL/gl3.h>
+#include <mach-o/dyld.h>   // _NSGetExecutablePath
 #else
 #ifndef GL_GLEXT_PROTOTYPES
 #define GL_GLEXT_PROTOTYPES 1
@@ -46,12 +47,12 @@ int main(int argc,char**argv){
   std::string shaderDir="shaders";
   { // B3 fix: resolve shaders relative to the executable, not the CWD
    std::filesystem::path exe;
-   #if defined(__APPLE__)
-   { char buf[4096]; uaddrsize_t sz=4096;
-     if(_NSGetExecutablePath(buf,&sz)==0){ std::error_code ec; exe=std::filesystem::canonical(buf,ec); } }
-   #elif defined(__linux__)
-   { std::error_code ec; exe=std::filesystem::canonical("/proc/self/exe",ec); }
-   #endif
+    #if defined(__APPLE__)
+    { char buf[4096]; size_t sz=sizeof(buf);
+      if(_NSGetExecutablePath(buf,&sz)==0){ std::error_code ec; exe=std::filesystem::canonical(buf,ec); } }
+    #elif defined(__linux__)
+    { std::error_code ec; exe=std::filesystem::canonical("/proc/self/exe",ec); }
+    #endif
    if(!exe.empty()&&exe.has_parent_path()){
     auto cand=exe.parent_path()/"shaders";
     if(std::filesystem::exists(cand/"wire.vert")) shaderDir=cand.string();
