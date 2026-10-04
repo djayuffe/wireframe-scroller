@@ -1,4 +1,39 @@
 cmake_minimum_required(VERSION 3.20)
+
+# ---------------------------------------------------------------------------
+# macOS SDK/ARCH pinning — must run BEFORE project() because project() is what
+# triggers the compiler-ABI check, and on a Mac with a mismatched CLT SDK the
+# SDK's .tbd stubs (libSystem.B.tbd, libc++.1.tbd, OpenGL.tbd) carry arch
+# tokens (e.g. "arm64e.x1-macos") that the active ld/tapi can't parse:
+#     tapi error: malformed file .../libSystem.B.tbd:4:20: unknown architecture
+# That breaks even the trivial compiler test. The usual cause is a stale
+# CMAKE_OSX_SYSROOT cached from a previous (removed) Command Line Tools install,
+# or a freshly-updated CLT whose SDK is newer than the installed ld.
+#
+# Strategy: pin CMAKE_OSX_SYSROOT to the SDK xcrun actually reports (the one
+# matching the active toolchain) and set an explicit arch matching the host.
+# Pass -DIW_SYSROOT=<path> to override (e.g. a known-good older SDK).
+if(APPLE AND NOT CMAKE_CROSSCOMPILING)
+  if(NOT DEFINED IW_SYSROOT AND NOT DEFINED CMAKE_OSX_SYSROOT)
+    execute_process(COMMAND xcrun --show-sdk-path
+      OUTPUT_VARIABLE iw_sdk_path OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET RESULT_VARIABLE iw_xcrun_rc)
+    if(iw_xcrun_rc EQUAL 0 AND EXISTS "${iw_sdk_path}/usr/lib/libSystem.tbd")
+      set(CMAKE_OSX_SYSROOT "${iw_sdk_path}" CACHE PATH "macOS SDK sysroot (pinned before project())" FORCE)
+      message(STATUS "Pinned macOS SDK sysroot: ${iw_sdk_path}")
+    elseif(iw_xcrun_rc EQUAL 0)
+      set(CMAKE_OSX_SYSROOT "${iw_sdk_path}" CACHE PATH "macOS SDK sysroot (pinned before project())" FORCE)
+      message(WARNING "xcrun SDK path ${iw_sdk_path} lacks usr/lib/libSystem.tbd; using it anyway")
+    endif()
+  endif()
+  if(NOT DEFINED CMAKE_OSX_ARCHITECTURES)
+    execute_process(COMMAND uname -m OUTPUT_VARIABLE iw_host_arch OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(iw_host_arch STREQUAL "arm64")
+      set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "macOS build arch" FORCE)
+    endif()
+  endif()
+endif()
+
 project(ImpossibleWireframe VERSION 4.25 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

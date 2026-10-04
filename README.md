@@ -53,11 +53,16 @@ same commands (or `make`).
 >   your `build/` was configured against an SDK path that no longer exists (stale
 >   CMakeCache). Just run `make reconfigure` (it wipes `build/` and reconfigures) —
 >   the Makefile's `configure` target does this automatically now.
-> - If you hit `tapi error: malformed file .../OpenGL.tbd ... unknown architecture`
->   (a CLT-SDK `.tbd` stub your clang/ld can't parse), install a real OpenGL
->   dylib with `brew install opengl` — CMake prefers `libOpenGL.dylib` over the
->   framework stub when present, which sidesteps the malformed `.tbd`. If that
->   isn't enough, pin a different SDK: `make reconfigure CMAKE_EXTRA=-DCMAKE_OSX_SYSROOT=$(xcrun --show-sdk-path)`.
+> - If you hit `tapi error: malformed file .../libSystem.B.tbd ... unknown
+>   architecture` (or `OpenGL.tbd`, `libc++.tbd`) — even during CMake's compiler
+>   check — your active `ld` can't parse the selected SDK's `.tbd` stubs. This
+>   is usually a stale/mismatched CLT SDK (a removed CLT install, or a CLT
+>   newer than the installed Xcode/ld). Fix: `make reconfigure` (CMakeLists now
+>   pins `CMAKE_OSX_SYSROOT` to `xcrun --show-sdk-path` and `CMAKE_OSX_ARCHITECTURES`
+>   to the host arch before `project()`). If a different SDK is needed:
+>   `make reconfigure CMAKE_EXTRA=-DIW_SYSROOT=$(xcrun --show-sdk-path)`. As a
+>   last resort, align the toolchain: `sudo xcode-select -s /Library/Developer/CommandLineTools`
+>   (or an Xcode path) so the ld and SDK come from the same install.
 > - On Apple the project links a real `libOpenGL.dylib` when available, else
 >   `-framework OpenGL` (never the `OpenGL::GL` SDK-baked path), and adds the
 >   OpenGL include dir so `<OpenGL/gl3.h>` resolves without relying on

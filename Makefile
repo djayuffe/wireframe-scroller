@@ -29,9 +29,11 @@ all: build
 # configure always wipes the build dir first. A stale CMake cache can hold an
 # SDK path (CMAKE_OSX_SYSROOT / a baked OpenGL.framework / .tbd location) that
 # no longer matches the installed Command Line Tools, which produces linker
-# errors like "tapi error: malformed file .../OpenGL.tbd ... unknown
-# architecture". A fresh configure re-resolves the SDK cleanly. Pass
-# CMAKE_EXTRA=-DCMAKE_OSX_SYSROOT=<path> to pin a specific SDK.
+# errors like "tapi error: malformed file .../libSystem.B.tbd ... unknown
+# architecture" (this breaks even CMake's compiler check). A fresh configure
+# re-resolves the SDK cleanly; CMakeLists pins CMAKE_OSX_ARCHITECTURES to the
+# host and CMAKE_OSX_SYSROOT to xcrun's SDK. To pin a specific SDK:
+#   make reconfigure CMAKE_EXTRA=-DIW_SYSROOT=$(xcrun --show-sdk-path)
 configure:
 	rm -rf $(BUILD_DIR)
 	$(CMAKE) -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=$(TYPE) $(CMAKE_EXTRA)
