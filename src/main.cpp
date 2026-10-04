@@ -33,11 +33,27 @@ int main(int argc,char**argv){
     else if(arg=="--no-scroller")noScroller=true;
     else if(arg=="--logos"&&i+1<argc)logoOverride=argv[++i];
     else if(arg=="--recipe"&&i+1<argc){recipeArg=std::atoi(argv[++i]);haveRecipe=true;}
-   }
- if(musicPath.empty()){
-  std::filesystem::path defaultMusic="assets/music/drozerix_-_silicon_dancer.mod";
-  if(std::filesystem::exists(defaultMusic)) musicPath=defaultMusic;
- }
+    else if(arg=="--help"||arg=="-h"){
+      std::fprintf(stdout,
+        "Impossible Wireframe v4.25\n"
+        "Usage: impossible_wireframe [options]\n"
+        "  --bpm N         Tempo (default 132)\n"
+        "  --music PATH    Audio module/wav to play (default: assets/music if present)\n"
+        "  --no-scroller   Start with the text marquee off (toggle with T)\n"
+        "  --logos DIR     Directory of UBER_*_1920x1080.jpg logo cards\n"
+        "  --recipe N      Start in recipe mode with curated recipe N (0-23)\n"
+        "  -h, --help      Show this help\n"
+        "Keys: Left/Right cycle scenes, Space back to auto, R recipe mode,\n"
+        "      Up/Down cycle recipe, P re-roll mutation, T toggle scroller, Esc quit\n");
+      return 0;}
+    }
+  // Validate --recipe: an out-of-range index would otherwise silently wrap
+  // (recipe(N % count)) and the user would get a different recipe than asked.
+  if(haveRecipe){ int n=recipeCount(); if(recipeArg<0||recipeArg>=n){ std::fprintf(stderr,"--recipe N must be in [0,%d] (got %d)\n",n-1,recipeArg); return 2; } }
+  if(musicPath.empty()){
+   std::filesystem::path defaultMusic="assets/music/drozerix_-_silicon_dancer.mod";
+   if(std::filesystem::exists(defaultMusic)) musicPath=defaultMusic;
+  }
  if(!glfwInit()){std::fprintf(stderr,"GLFW initialization failed\n");return 1;}glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,4);glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,1);glfwWindowHint(GLFW_OPENGL_PROFILE,GLFW_OPENGL_CORE_PROFILE);
 #ifdef __APPLE__
  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT,GL_TRUE);
@@ -87,8 +103,17 @@ int main(int argc,char**argv){
     // procedural "mutation" rotation. R toggles recipe mode, +/- cycle it.
     bool recipeMode=haveRecipe, prevF=false, prevP=false; int recipeChoice=haveRecipe?recipeArg:0; uint32_t baseSeed=0x50454646ull;
     std::string lastRecipeName;  // recipe/effect name shown in the scroller
-   while(!glfwWindowShouldClose(w)){
-   double now=glfwGetTime();auto music=audio.state();double showSeconds=music.active?music.seconds:now;auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.level);int autoScene=int(sync.barIndex/2)%scenes.count();
+    while(!glfwWindowShouldClose(w)){
+    // A GPU reset / driver crash flips the context to lost; GLFW reports it
+    // once. Treat it as fatal (the GL state is gone — the app can't recover
+    // without a full re-init) rather than spinning on a dead context.
+    // GLFW_CONTEXT_LOST = 0x00020001 (not declared because we use
+    // GLFW_INCLUDE_NONE, so GLFW's header doesn't pull in the GL constants).
+    if(glfwGetWindowAttrib(w,0x00020001 /*GLFW_CONTEXT_LOST*/)){
+      std::fprintf(stderr,"GL context lost (GPU reset/driver crash); exiting\n");
+      break;
+    }
+    double now=glfwGetTime();auto music=audio.state();double showSeconds=music.active?music.seconds:now;auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.level);int autoScene=int(sync.barIndex/2)%scenes.count();
    if(glfwGetKey(w,GLFW_KEY_T)==GLFW_PRESS){bool want=!scrollerOn;scrollerOn=want;}
    bool L=glfwGetKey(w,GLFW_KEY_LEFT)==GLFW_PRESS,R=glfwGetKey(w,GLFW_KEY_RIGHT)==GLFW_PRESS;
    // Normalize the current scene (auto -> autoScene) before applying the
