@@ -80,23 +80,38 @@ if(OpenGL_FOUND AND glfw3_FOUND)
  add_executable(impossible_wireframe src/main.cpp src/Renderer.cpp src/Audio.cpp src/TextScroller.cpp src/Image.cpp)
   target_include_directories(impossible_wireframe PRIVATE include thirdparty)
 target_include_directories(iw_geometry PUBLIC thirdparty)
-   # Link GLFW via the imported target (carries the found library path, so a
-   # Homebrew install in /opt/homebrew/lib resolves correctly) — never the bare
-   # "glfw" string, which forces the linker to search default system paths.
-   # On macOS, find_package(OpenGL) resolves OpenGL::GL to a framework path
-   # under a specific SDK (e.g. .../MacOSX.sdk/.../OpenGL.framework); when that
-   # SDK path is absent the linker fails with "No rule to make target
-   # '<sdk>/.../OpenGL.framework'". Link -framework OpenGL directly so it
-   # resolves at link time, and add OPENGL_INCLUDE_DIR so <OpenGL/gl3.h> doesn't
-   # depend on toolchain-default SDK search. Other platforms use OpenGL::GL.
-   if(APPLE)
-    target_link_libraries(impossible_wireframe PRIVATE iw_geometry ${IW_GLFW_TARGET} "-framework OpenGL")
-    if(OPENGL_INCLUDE_DIR)
-     target_include_directories(impossible_wireframe PRIVATE "${OPENGL_INCLUDE_DIR}")
+    # Link GLFW via the imported target (carries the found library path, so a
+    # Homebrew install in /opt/homebrew/lib resolves correctly) — never the bare
+    # "glfw" string, which forces the linker to search default system paths.
+    #
+    # macOS OpenGL is tricky. Two failure modes hit:
+    #  (a) find_package(OpenGL) resolves OpenGL::GL to a framework path under a
+    #      specific SDK (.../MacOSX.sdk/.../OpenGL.framework); when that SDK path
+    #      is absent the linker fails with "No rule to make target".
+    #  (b) the CLT SDK ships OpenGL as a .tbd text stub whose arch tokens
+    #      (e.g. "arm64e.x1-macos") some clang/ld versions can't parse:
+    #      "tapi error: malformed file .../OpenGL.tbd ... unknown architecture".
+    # Strategy: prefer a real dylib (Homebrew's libOpenGL.dylib) when present —
+    # it has no .tbd stub and sidesteps both failures. Otherwise fall back to
+    # -framework OpenGL (resolves at link time) and add OPENGL_INCLUDE_DIR so
+    # <OpenGL/gl3.h> doesn't depend on toolchain-default SDK search.
+    if(APPLE)
+     find_path(IW_OPENGL_INCLUDE_DIR OpenGL/gl3.h
+               HINTS /opt/homebrew/include /opt/local/include /usr/local/include
+                     ${OPENGL_INCLUDE_DIR})
+     find_library(IW_OPENGL_LIB OpenGL
+                  HINTS /opt/homebrew/lib /opt/local/lib /usr/local/lib)
+     if(IW_OPENGL_LIB)
+      target_link_libraries(impossible_wireframe PRIVATE iw_geometry ${IW_GLFW_TARGET} ${IW_OPENGL_LIB})
+     else()
+      target_link_libraries(impossible_wireframe PRIVATE iw_geometry ${IW_GLFW_TARGET} "-framework OpenGL")
+     endif()
+     if(IW_OPENGL_INCLUDE_DIR)
+      target_include_directories(impossible_wireframe PRIVATE "${IW_OPENGL_INCLUDE_DIR}")
+     endif()
+    else()
+     target_link_libraries(impossible_wireframe PRIVATE iw_geometry ${IW_GLFW_TARGET} OpenGL::GL)
     endif()
-   else()
-    target_link_libraries(impossible_wireframe PRIVATE iw_geometry ${IW_GLFW_TARGET} OpenGL::GL)
-   endif()
   if(IW_SDL_TARGET AND IW_OPENMPT_TARGET)
    target_link_libraries(impossible_wireframe PRIVATE ${IW_SDL_TARGET} ${IW_OPENMPT_TARGET})
    target_compile_definitions(impossible_wireframe PRIVATE IW_HAS_AUDIO SDL_MAIN_HANDLED)

@@ -48,12 +48,20 @@ macOS add `brew install sdl2 libopenmpt`. Linux: install a C++20 compiler,
 CMake, OpenGL development headers and GLFW3 development package, then use the
 same commands (or `make`).
 
-> **macOS build note** — if you hit
-> `No rule to make target '.../MacOSX.sdk/System/Library/Frameworks/OpenGL.framework'`,
-> your `build/` dir was configured against an SDK path that no longer exists
-> (stale CMakeCache). Delete it and reconfigure: `rm -rf build && cmake -S . -B build`.
-> The project also links `-framework OpenGL` directly on Apple (not the
-> `OpenGL::GL` SDK path) so a clean build never bakes in an SDK location.
+> **macOS build notes**
+> - If you hit `No rule to make target '.../MacOSX.sdk/System/Library/Frameworks/OpenGL.framework'`,
+>   your `build/` was configured against an SDK path that no longer exists (stale
+>   CMakeCache). Just run `make reconfigure` (it wipes `build/` and reconfigures) —
+>   the Makefile's `configure` target does this automatically now.
+> - If you hit `tapi error: malformed file .../OpenGL.tbd ... unknown architecture`
+>   (a CLT-SDK `.tbd` stub your clang/ld can't parse), install a real OpenGL
+>   dylib with `brew install opengl` — CMake prefers `libOpenGL.dylib` over the
+>   framework stub when present, which sidesteps the malformed `.tbd`. If that
+>   isn't enough, pin a different SDK: `make reconfigure CMAKE_EXTRA=-DCMAKE_OSX_SYSROOT=$(xcrun --show-sdk-path)`.
+> - On Apple the project links a real `libOpenGL.dylib` when available, else
+>   `-framework OpenGL` (never the `OpenGL::GL` SDK-baked path), and adds the
+>   OpenGL include dir so `<OpenGL/gl3.h>` resolves without relying on
+>   toolchain-default SDK search.
 
 If OpenGL/GLFW are absent, CMake still builds `iw_geometry` and `geometry_tests`, allowing headless CI validation.
 
