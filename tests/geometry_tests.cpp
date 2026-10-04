@@ -78,8 +78,13 @@ int main(){
    // Effect system: the lab's 64 CPU warpers + 24 recipes must be deterministic,
    // finite, and fail-safe (never return an empty/invalid mesh).
    {
-     req(effectCount()==64,"effectCount 64");
-     req(recipeCount()==24,"recipeCount 24");
+      req(effectCount()==64,"effectCount 64");
+      req(recipeCount()==24,"recipeCount 24");
+      // recipeName must agree with recipe().name (regression: recipeName used
+      // to return a string_view into a destroyed temporary).
+      for(int i=0;i<recipeCount();i++)req(recipeName(i)==recipe(i).name,"recipeName matches recipe");
+      req(recipeName(0)=="Raw"&&recipeName(23)=="Dimensional Infection","recipeName endpoints");
+      req(recipeName(24)==recipeName(0),"recipeName wraps");
      // every single effect on a torus at several (time, amount) phases stays valid
      for(int id=0;id<effectCount();++id){
        EffectContext ec; ec.amount=1.0f; ec.seed=7u;

@@ -185,7 +185,10 @@ EffectRecipe recipe(int id) {
   return r;
 }
 int recipeCount() { return 24; }
-std::string_view recipeName(int id) { return recipe(id).name; }
+std::string_view recipeName(int id) {
+  static const char* names[] = {"Raw","Singularity Bloom","Impossible Cathedral","Quantum Shatter","Hyper Echo","Wormhole Lattice","Spectral Organism","Topology Storm","Recursive Reactor","Kaleido Collapse","Black Star","Interference Bridge","Crystal Fracture","Mobius Lightning","Event Scanner","Dark Matter Flower","Projective Failure","Recursive Constellation","Alien Transmission","Fractal Orbit","Dual Singularity","Wireframe Supernova","Quasicrystal Ghost","Dimensional Infection"};
+  return names[wrap(id, recipeCount())];
+}
 
 EffectRecipe mutateRecipe(uint32_t seed, int depth) {
   auto h = [](uint32_t x) { x ^= x >> 16; x *= 0x7feb352dU; x ^= x >> 15; x *= 0x846ca68bU; x ^= x >> 16; return x; };
