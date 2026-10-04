@@ -36,9 +36,10 @@ void main(){
   float y = px.y;
   float a = 0.0;
   if(y >= bandY0 && y < bandY0 + glyphH){
-    // Scroll left; wrap so the text re-enters from the right.
+    // Scroll left; wrap so the text re-enters from the right. uScrollOffset is
+    // a positive in-cycle distance, so SUBTRACT it (text moves left over time).
     float period = uResolution.x + uTextWidth;
-    float wrapped = mod(px.x + uScrollOffset, period);
+    float wrapped = mod(px.x - uScrollOffset, period);
     if(wrapped < uTextWidth){
       float fi = floor(wrapped / cellW);
       float fx = mod(wrapped, cellW);

@@ -25,14 +25,14 @@
 #include <tuple>
 int main(int argc,char**argv){
   double bpm=132.0;std::filesystem::path musicPath,logoOverride;bool noScroller=false;
-  int recipeArg=-1;  // -1 = auto (per-scene curated + mutation), >=0 = fixed recipe id
+  bool haveRecipe=false; int recipeArg=0;  // haveRecipe=false -> auto mode
   for(int i=1;i<argc;i++){
     std::string arg(argv[i]);
     if(arg=="--bpm"&&i+1<argc)bpm=std::max(1.0,std::atof(argv[++i]));
     else if(arg=="--music"&&i+1<argc)musicPath=argv[++i];
     else if(arg=="--no-scroller")noScroller=true;
     else if(arg=="--logos"&&i+1<argc)logoOverride=argv[++i];
-    else if(arg=="--recipe"&&i+1<argc)recipeArg=std::atoi(argv[++i]);
+    else if(arg=="--recipe"&&i+1<argc){recipeArg=std::atoi(argv[++i]);haveRecipe=true;}
    }
  if(musicPath.empty()){
   std::filesystem::path defaultMusic="assets/music/drozerix_-_silicon_dancer.mod";
@@ -85,7 +85,7 @@ int main(int argc,char**argv){
     bool scrollerOn=!noScroller;
     // Per-scene effect recipe (the lab's 24 curated recipes) with an optional
     // procedural "mutation" rotation. R toggles recipe mode, +/- cycle it.
-    bool recipeMode=false, prevF=false, prevP=false; int recipeChoice=recipeArg; uint32_t baseSeed=0x50454646ull;
+    bool recipeMode=haveRecipe, prevF=false, prevP=false; int recipeChoice=haveRecipe?recipeArg:0; uint32_t baseSeed=0x50454646ull;
    while(!glfwWindowShouldClose(w)){
    double now=glfwGetTime();auto music=audio.state();double showSeconds=music.active?music.seconds:now;auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.level);int autoScene=int(sync.barIndex/2)%scenes.count();
    if(glfwGetKey(w,GLFW_KEY_T)==GLFW_PRESS){bool want=!scrollerOn;scrollerOn=want;}
@@ -111,34 +111,33 @@ int main(int argc,char**argv){
       const Mesh3* secondary=m.v.empty()?nullptr:&scenes.mesh((scene+1)%scenes.count(),showSeconds,seed);
       EffectRecipe rc;
       if(recipeMode){ rc=recipe(recipeChoice); }
-      else if(recipeArg>=0){ rc=recipe(recipeArg%recipeCount()); }
+      else if(haveRecipe){ rc=recipe(recipeArg%recipeCount()); }
       else {
-        // Auto: per-scene curated recipe (rotated by scene index) + mutation
-        // overlay (the mutation adds 2-3 extra stages on top of the curated
-        // recipe's stages, for unique per-frame variation).
+        // Auto: per-scene curated recipe (rotated by scene index) + a mutation
+        // overlay (2 extra deterministic stages) for unique per-frame variation.
+        // Combine into a SEPARATE buffer — copying curated->curated in place
+        // would be a no-op self-copy and the mutation would never appear.
         int baseRid=scene%recipeCount();
-        rc=recipe(baseRid);
+        auto base=recipe(baseRid);
         auto mut=mutateRecipe(ec.seed,2);
-        int total=std::min(6,rc.stageCount+mut.stageCount);
+        rc=EffectRecipe{}; rc.name="Auto";
         int i=0;
-        for(int k=0;k<rc.stageCount&&i<total;k++)rc.stages[i++]=rc.stages[k];
-        for(int k=0;k<mut.stageCount&&i<total;k++)rc.stages[i++]=mut.stages[k];
-        rc.stageCount=total;
-        rc.name="Auto";
+        for(int k=0;k<base.stageCount&&i<6;k++)rc.stages[i++]=base.stages[k];
+        for(int k=0;k<mut.stageCount&&i<6;k++)rc.stages[i++]=mut.stages[k];
+        rc.stageCount=i;
       }
       applyRecipe(m,rc,ec,secondary);
     }
     auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);if(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig){if(!r.upload(m)){std::fprintf(stderr,"Mesh rejected in scene %d: %s\n",scene,r.error().c_str());break;}lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;}int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=std::max(.1f,geo::stats(m).radius);float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;
-     // 1) Logo backdrop (crossfades per scene, subtle Ken Burns). In logo mode
-     //    draw() captures wire+travelers to the HDR FBO and finishLogoFrame()
-     //    composites the logo + runs the post/FX pass over the whole frame.
-     r.drawBackground(float(showSeconds),W,H,scene,music.level);
-     // 2) Wireframe (improved scaling/morphing via sizeCycle + breathing).
-     if(!r.draw(float(showSeconds),W,H,float(W)/float(H),scene,std::min(1.48f,1.92f/rad)*sizeCycle,1.f+sync.pulse,music.level)){std::fprintf(stderr,"Renderer draw failed: %s\n",r.error().c_str());break;}
-     // 3) Traveling objects weaving back and forth through the wireframe.
-     r.drawTravelers(float(showSeconds),W,H,float(W)/float(H),std::min(1.48f,1.92f/rad)*sizeCycle,music.level);
-     // 4) Logo mode: composite logo + run the screen-space FX post pass.
-     r.finishLogoFrame(float(showSeconds),W,H,scene,music.level);
+      // 1) Wireframe. In logo mode draw() captures the wireframe into the HDR
+      //    FBO; in no-logo mode it runs the post/FX pass directly.
+      if(!r.draw(float(showSeconds),W,H,float(W)/float(H),scene,std::min(1.48f,1.92f/rad)*sizeCycle,1.f+sync.pulse,music.level)){std::fprintf(stderr,"Renderer draw failed: %s\n",r.error().c_str());break;}
+      // 2) Traveling objects weaving back and forth through the wireframe
+      //    (captured into the HDR FBO in logo mode).
+      r.drawTravelers(float(showSeconds),W,H,float(W)/float(H),std::min(1.48f,1.92f/rad)*sizeCycle,music.level);
+      // 3) Logo mode: composite the fullscreen logo into the capture + run the
+      //    screen-space FX post pass over logo+wire+travelers.
+      r.finishLogoFrame(float(showSeconds),W,H,scene,music.level);
    // Fullscreen beat-synced text marquee: scene name + provenance.
    if(scrollerOn){
     auto&si=scenes.info(scene);

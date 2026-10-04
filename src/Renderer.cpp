@@ -141,7 +141,7 @@ bool Renderer::loadLogos(const std::string&dir){
 // Fullscreen logo: cover-fit to the screen, crossfade on scene change,
 // subtle Ken Burns. Drawn DIRECTLY to the default framebuffer so the picture
 // is guaranteed visible (no post-shader FBO blend to break).
-bool Renderer::drawBackground(float time,int width,int height,int sceneIndex,float musicLevel){
+bool Renderer::drawBackground(float time,int width,int height,int sceneIndex,float musicLevel,bool logoComposite){
   if(!bgProgram_||logos_.empty())return false;
   int target=(logos_.size()>1)?(sceneIndex%(int)logos_.size()):0;
   // On scene change, start a crossfade from the current (A) to the target (B).
@@ -176,11 +176,20 @@ bool Renderer::drawBackground(float time,int width,int height,int sceneIndex,flo
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D,bgTexB_);
   if(uBgTexB_>=0)glUniform1i(uBgTexB_,1);
-  glBindFramebuffer(GL_FRAMEBUFFER,0);
+  // In logo mode the logo is composited INTO the HDR capture (over the
+  // wireframe, normal alpha blend) so the post/FX pass sees it; otherwise it
+  // is drawn straight to the screen.
+  if(logoComposite){
+    glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);
+    glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+  } else {
+    glBindFramebuffer(GL_FRAMEBUFFER,0);
+  }
   glDisable(GL_DEPTH_TEST);
   glViewport(0,0,width,height);
   glBindVertexArray(bgVao_);
   glDrawArrays(GL_TRIANGLES,0,3);
+  if(logoComposite)glDisable(GL_BLEND);
   glActiveTexture(GL_TEXTURE0);
   return true;
 }
@@ -197,7 +206,9 @@ bool Renderer::drawTravelers(float time,int width,int height,float aspect,float 
   Rx[5]=cx;Rx[6]=sx;Rx[9]=-sx;Rx[10]=cx;
   perspective(P,(52.f+3.f*std::sin(time*.07f))*3.14159265f/180.f,std::max(.05f,aspect),.05f,100.f);
   mul(R,Ry,Rx);mul(X,V,R);mul(M,P,X);
-  glBindFramebuffer(GL_FRAMEBUFFER,0);
+  // In logo mode the travelers are captured into the HDR buffer (additive) so
+  // the post/FX pass sees them; otherwise they draw to the screen.
+  glBindFramebuffer(GL_FRAMEBUFFER,hasLogos_?hdrFbo_:0);
   glEnable(GL_DEPTH_TEST);
   glUseProgram(travelerProgram_);
   if(uTrMVP_>=0)glUniformMatrix4fv(uTrMVP_,1,GL_FALSE,M);
@@ -213,8 +224,9 @@ bool Renderer::drawTravelers(float time,int width,int height,float aspect,float 
 bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,float musicLevel){
   if(!logoCapturePending_)return false;
   logoCapturePending_=false;
-  // 1) Composite the fullscreen logo over the captured wireframe frame.
-  drawBackground(time,width,height,sceneIndex,musicLevel);
+  // 1) Composite the fullscreen logo INTO the captured buffer (over the
+  //    wireframe + travelers, normal alpha blend) so the post/FX pass sees it.
+  drawBackground(time,width,height,sceneIndex,musicLevel,true);
   // 2) Run the post/FX pass (lensing, shockwave, CA, SDF, glitch, scanlines,
   //    ACES...) over the combined frame to the default framebuffer.
   glBindFramebuffer(GL_FRAMEBUFFER,0);

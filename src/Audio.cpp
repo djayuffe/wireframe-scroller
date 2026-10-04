@@ -63,6 +63,8 @@ void AudioPlayer::close() {
   }
   seconds_.store(0.0);
   level_.store(0.0f);
+  bass_.store(0.0f); mid_.store(0.0f); treble_.store(0.0f);
+  lpB_=0.f; lpM_=0.f; lpT_=0.f;
 #endif
 }
 
@@ -106,12 +108,13 @@ void AudioPlayer::render(float* out, int frames) {
   // guard needed for audio-rate signals). Bass <350 Hz, mid 350-3000, treble
   // >3000. Coefficients precomputed for 48 kHz (close enough for 44.1 too).
   const float aB=.021f, aM=.14f, aT=.5f;  // 1-pole lowpass alphas
-  float lpB=0, lpM=0, lpT=0;
+  // lpB_/lpM_/lpT_ are persistent member state (not per-call locals) so the
+  // one-pole filters stay warm across the ~37 render() calls/second.
   for (int i = 0; i < frames * 2; ++i) {
     float s=out[i];
     sum += double(s) * double(s);
-    lpB += aB*(s-lpB); lpM += aM*(s-lpM); lpT += aT*(s-lpT);
-    float lo=lpB, band=lpM-lpB, hi=lpT-lpM;
+    lpB_ += aB*(s-lpB_); lpM_ += aM*(s-lpM_); lpT_ += aT*(s-lpT_);
+    float lo=lpB_, band=lpM_-lpB_, hi=lpT_-lpM_;
     bSum+=std::fabs(lo); mSum+=std::fabs(band); tSum+=std::fabs(hi);
   }
   const int N=std::max(1,frames*2);

@@ -14,9 +14,11 @@ public:
   // Logo background: load the UBER_*_1920x1080.jpg cards from a directory.
   bool loadLogos(const std::string& dir);
   int logoCount() const { return (int)logos_.size(); }
-  // Draw a full-screen logo backdrop behind the wireframe (crossfades on
-  // scene change, subtle Ken Burns). Returns false if no logos loaded.
-  bool drawBackground(float time,int width,int height,int sceneIndex,float musicLevel=0.f);
+   // Draw a full-screen logo backdrop behind the wireframe (crossfades on
+   // scene change, subtle Ken Burns). logoComposite=true renders into the HDR
+   // capture buffer (over the wireframe, normal alpha blend) instead of the
+   // screen — used in logo mode so the post/FX pass sees the logo too.
+   bool drawBackground(float time,int width,int height,int sceneIndex,float musicLevel=0.f,bool logoComposite=false);
    // Draw the traveling objects moving back and forth through the wireframe.
    bool drawTravelers(float time,int width,int height,float aspect,float scale,float musicLevel=0.f);
    // Logo mode: composite the fullscreen logo over the captured wireframe frame

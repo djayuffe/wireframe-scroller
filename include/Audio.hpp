@@ -41,5 +41,9 @@ private:
   std::atomic<float> level_{};
   std::atomic<float> bass_{},mid_{},treble_{};
   std::atomic<int> order_{},pattern_{},row_{},tempo_{125},speed_{6};
+  // Persistent one-pole IIR state for the band-split (the audio callback is
+  // single-threaded, so these need no sync). Kept across render() calls so the
+  // filters aren't re-warmed on every 512-sample chunk.
+  float lpB_{},lpM_{},lpT_{};
 #endif
 };
