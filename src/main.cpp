@@ -25,13 +25,15 @@
 #include <tuple>
 int main(int argc,char**argv){
   double bpm=132.0;std::filesystem::path musicPath,logoOverride;bool noScroller=false;
+  int recipeArg=-1;  // -1 = auto (per-scene curated + mutation), >=0 = fixed recipe id
   for(int i=1;i<argc;i++){
-   std::string arg(argv[i]);
-   if(arg=="--bpm"&&i+1<argc)bpm=std::max(1.0,std::atof(argv[++i]));
-   else if(arg=="--music"&&i+1<argc)musicPath=argv[++i];
-   else if(arg=="--no-scroller")noScroller=true;
-   else if(arg=="--logos"&&i+1<argc)logoOverride=argv[++i];
-  }
+    std::string arg(argv[i]);
+    if(arg=="--bpm"&&i+1<argc)bpm=std::max(1.0,std::atof(argv[++i]));
+    else if(arg=="--music"&&i+1<argc)musicPath=argv[++i];
+    else if(arg=="--no-scroller")noScroller=true;
+    else if(arg=="--logos"&&i+1<argc)logoOverride=argv[++i];
+    else if(arg=="--recipe"&&i+1<argc)recipeArg=std::atoi(argv[++i]);
+   }
  if(musicPath.empty()){
   std::filesystem::path defaultMusic="assets/music/drozerix_-_silicon_dancer.mod";
   if(std::filesystem::exists(defaultMusic)) musicPath=defaultMusic;
@@ -83,25 +85,47 @@ int main(int argc,char**argv){
     bool scrollerOn=!noScroller;
     // Per-scene effect recipe (the lab's 24 curated recipes) with an optional
     // procedural "mutation" rotation. R toggles recipe mode, +/- cycle it.
-    bool recipeMode=false, prevF=false; int recipeChoice=0; uint32_t baseSeed=0x50454646ull;
+    bool recipeMode=false, prevF=false, prevP=false; int recipeChoice=recipeArg; uint32_t baseSeed=0x50454646ull;
    while(!glfwWindowShouldClose(w)){
    double now=glfwGetTime();auto music=audio.state();double showSeconds=music.active?music.seconds:now;auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.level);int autoScene=int(sync.barIndex/2)%scenes.count();
    if(glfwGetKey(w,GLFW_KEY_T)==GLFW_PRESS){bool want=!scrollerOn;scrollerOn=want;}
   bool L=glfwGetKey(w,GLFW_KEY_LEFT)==GLFW_PRESS,R=glfwGetKey(w,GLFW_KEY_RIGHT)==GLFW_PRESS;if(L&&!prevL)manual=(manual<0?autoScene:manual)-1;if(R&&!prevR)manual=(manual<0?autoScene:manual)+1;prevL=L;prevR=R;if(manual>=0){manual=(manual%scenes.count()+scenes.count())%scenes.count();}if(glfwGetKey(w,GLFW_KEY_SPACE)==GLFW_PRESS)manual=-1;
   int scene=manual<0?autoScene:manual;Mesh3 m=scenes.mesh(scene,showSeconds,seed);if(scene!=lastScene){auto&si=scenes.info(scene);std::fprintf(stdout,"scene %02d: %.*s [%.*s]\n",scene,int(si.name.size()),si.name.data(),int(si.provenance.size()),si.provenance.data());lastScene=scene;}
-    // Toggle effect-recipe mode (R). Auto: per-scene deterministic mutation.
-    // Recipe: hold a fixed curated recipe, +/- to cycle.
-    bool F=glfwGetKey(w,GLFW_KEY_R)==GLFW_PRESS; if(F&&!prevF){recipeMode=!recipeMode; std::fprintf(stdout,"effects: %s\n",recipeMode?"recipe mode (curated, +/- to cycle)":"auto (per-scene mutation)");} prevF=F;
+    // Toggle effect-recipe mode (R). Auto: per-scene curated recipe (rotated
+    // by scene index) + a deterministic mutation overlay. Recipe: hold a fixed
+    // curated recipe, Up/Down to cycle.
+    bool F=glfwGetKey(w,GLFW_KEY_R)==GLFW_PRESS; if(F&&!prevF){recipeMode=!recipeMode; std::fprintf(stdout,"effects: %s\n",recipeMode?"recipe mode (curated, Up/Down to cycle)":"auto (per-scene curated + mutation)");} prevF=F;
     if(recipeMode){ if(glfwGetKey(w,GLFW_KEY_UP)==GLFW_PRESS)recipeChoice=(recipeChoice+1)%recipeCount(); if(glfwGetKey(w,GLFW_KEY_DOWN)==GLFW_PRESS)recipeChoice=(recipeChoice-1+recipeCount())%recipeCount(); }
-    // Drive the lab's CPU effect system from music/pulse + a rotating secondary
-    // object (feeds the bridge effects). applyRecipe restores m on any invalid
-    // stage, so a bad combo can never blank the scene.
+    // P: re-roll the mutation seed (new procedural variant for the current scene).
+    bool P=glfwGetKey(w,GLFW_KEY_P)==GLFW_PRESS; if(P&&!prevP){baseSeed^=0x9e3779b9u; std::fprintf(stdout,"effects: mutation seed re-rolled (0x%08x)\n",baseSeed);} prevP=P;
+    // Drive the lab's CPU effect system. In auto mode each scene gets a curated
+    // recipe (rotated by scene index for variety) overlaid with a deterministic
+    // mutation. In recipe mode a single curated recipe is held. When audio is
+    // active, real bass/mid/treble bands drive the audio-reactive effects;
+    // otherwise synthetic sine bands are used.
     {
       EffectContext ec; ec.time=float(showSeconds); ec.amount=1.0f+.6f*float(sync.pulse); ec.beat=sync.pulse;
-      ec.bass=.5f+.5f*std::sin(float(showSeconds)*2.0f); ec.mid=.5f+.5f*std::sin(float(showSeconds)*3.3f+1.1f); ec.treble=.5f+.5f*std::sin(float(showSeconds)*5.7f+2.3f);
+      if(music.active){ ec.bass=music.bass; ec.mid=music.mid; ec.treble=music.treble; }
+      else { ec.bass=.5f+.5f*std::sin(float(showSeconds)*2.0f); ec.mid=.5f+.5f*std::sin(float(showSeconds)*3.3f+1.1f); ec.treble=.5f+.5f*std::sin(float(showSeconds)*5.7f+2.3f); }
       ec.seed=baseSeed+uint32_t(scene)*131u;
       const Mesh3* secondary=m.v.empty()?nullptr:&scenes.mesh((scene+1)%scenes.count(),showSeconds,seed);
-      EffectRecipe rc=recipeMode?recipe(recipeChoice):mutateRecipe(baseSeed+uint32_t(scene)*131u,4);
+      EffectRecipe rc;
+      if(recipeMode){ rc=recipe(recipeChoice); }
+      else if(recipeArg>=0){ rc=recipe(recipeArg%recipeCount()); }
+      else {
+        // Auto: per-scene curated recipe (rotated by scene index) + mutation
+        // overlay (the mutation adds 2-3 extra stages on top of the curated
+        // recipe's stages, for unique per-frame variation).
+        int baseRid=scene%recipeCount();
+        rc=recipe(baseRid);
+        auto mut=mutateRecipe(ec.seed,2);
+        int total=std::min(6,rc.stageCount+mut.stageCount);
+        int i=0;
+        for(int k=0;k<rc.stageCount&&i<total;k++)rc.stages[i++]=rc.stages[k];
+        for(int k=0;k<mut.stageCount&&i<total;k++)rc.stages[i++]=mut.stages[k];
+        rc.stageCount=total;
+        rc.name="Auto";
+      }
       applyRecipe(m,rc,ec,secondary);
     }
     auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);if(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig){if(!r.upload(m)){std::fprintf(stderr,"Mesh rejected in scene %d: %s\n",scene,r.error().c_str());break;}lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;}int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=std::max(.1f,geo::stats(m).radius);float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;

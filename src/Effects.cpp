@@ -38,7 +38,12 @@ void copyInto(Mesh3& d, const Mesh3& s, V3 o, float sc, float a) {
   for (auto i : s.e) d.e.push_back({base + i.a, base + i.b});
 }
 void subdiv(Mesh3& m, int n, float j, uint32_t seed) {
-  n = std::clamp(n, 1, 8); Mesh3 o;
+  n = std::clamp(n, 1, 8);
+  // Cap edge growth: if the subdivision would produce >50k edges, skip it
+  // (the mesh is already dense enough; heavy recipes on large meshes would
+  // otherwise produce 100k+ edges per stage, killing frame time).
+  if (m.e.size() * (size_t)n > 50000) return;
+  Mesh3 o;
   for (const Edge& ed : m.e) {
     V3 a = m.v[ed.a], b = m.v[ed.b], dv = vsub(b, a), side = vnorm(vcross(dv, V3{.31f, .73f, .19f}));
     unsigned prev = (unsigned)o.v.size(); o.v.push_back(a);

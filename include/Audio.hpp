@@ -12,6 +12,9 @@ struct MusicState {
   bool active=false;
   double seconds=0.0;
   float level=0.0f;
+  float bass=0.0f;
+  float mid=0.0f;
+  float treble=0.0f;
   int order=0;
   int pattern=0;
   int row=0;
@@ -36,6 +39,7 @@ private:
   int rate_{48000};
   std::atomic<double> seconds_{};
   std::atomic<float> level_{};
+  std::atomic<float> bass_{},mid_{},treble_{};
   std::atomic<int> order_{},pattern_{},row_{},tempo_{125},speed_{6};
 #endif
 };

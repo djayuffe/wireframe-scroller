@@ -138,5 +138,26 @@ int main(){
      // empty-mesh guard
      { Mesh3 empty; EffectContext ec; req(!applyEffect(empty,4,ec,nullptr),"empty mesh -> false"); }
    }
+   // Audio band-split: the one-pole IIR coefficients must separate low/mid/high.
+   // Simulate the same 3-tap lowpass chain the renderer uses and verify that a
+   // 100 Hz sine ends up mostly in the bass band, 1 kHz in mid, 8 kHz in treble.
+   {
+     auto bandOf=[&](float freq){
+       const float rate=48000.f;
+       const float aB=.021f, aM=.14f, aT=.5f;
+       float lpB=0,lpM=0,lpT=0; float bAcc=0,mAcc=0,tAcc=0; int N=4800;
+       for(int i=0;i<N;i++){
+         float s=std::sin(2.f*3.14159265f*freq*float(i)/rate);
+         lpB+=aB*(s-lpB); lpM+=aM*(s-lpM); lpT+=aT*(s-lpT);
+         bAcc+=std::fabs(lpB); mAcc+=std::fabs(lpM-lpB); tAcc+=std::fabs(lpT-lpM);
+       }
+       float b=bAcc/float(N),m=mAcc/float(N),t=tAcc/float(N);
+       float tot=b+m+t; if(tot<1e-9f)return std::tuple<float,float,float>(0.f,0.f,0.f);
+       return std::make_tuple(b/tot,m/tot,t/tot);
+     };
+     auto[bl,ml,tl]=bandOf(100.f);   req(bl>ml&&bl>tl,"100Hz mostly bass");
+     auto[bm,mm,tm]=bandOf(1000.f);  req(mm>=bm&&mm>=tm,"1kHz mostly mid");
+     auto[bt,mt,tt]=bandOf(8000.f);   req(tt>=bt&&tt>=mt,"8kHz mostly treble");
+   }
    std::cout<<"geometry_tests: PASS; exact 120-cell V="<<c120.v.size()<<" E="<<c120.e.size()<<"\n";
  }

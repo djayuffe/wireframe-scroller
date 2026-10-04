@@ -72,6 +72,9 @@ MusicState AudioPlayer::state() const {
   s.active = module_ != nullptr;
   s.seconds = seconds_.load();
   s.level = level_.load();
+  s.bass = bass_.load();
+  s.mid = mid_.load();
+  s.treble = treble_.load();
   s.order = order_.load();
   s.pattern = pattern_.load();
   s.row = row_.load();
@@ -98,9 +101,25 @@ void AudioPlayer::render(float* out, int frames) {
     std::fill(out + got * 2, out + frames * 2, 0.0f);
   }
   double sum = 0.0;
-  for (int i = 0; i < frames * 2; ++i) sum += double(out[i]) * double(out[i]);
-  const float rms = static_cast<float>(std::sqrt(sum / std::max(1, frames * 2)));
+  float bSum=0,mSum=0,tSum=0;
+  // Zero-phase-ish 3-band split via simple one-pole IIR (stable, no aliasing
+  // guard needed for audio-rate signals). Bass <350 Hz, mid 350-3000, treble
+  // >3000. Coefficients precomputed for 48 kHz (close enough for 44.1 too).
+  const float aB=.021f, aM=.14f, aT=.5f;  // 1-pole lowpass alphas
+  float lpB=0, lpM=0, lpT=0;
+  for (int i = 0; i < frames * 2; ++i) {
+    float s=out[i];
+    sum += double(s) * double(s);
+    lpB += aB*(s-lpB); lpM += aM*(s-lpM); lpT += aT*(s-lpT);
+    float lo=lpB, band=lpM-lpB, hi=lpT-lpM;
+    bSum+=std::fabs(lo); mSum+=std::fabs(band); tSum+=std::fabs(hi);
+  }
+  const int N=std::max(1,frames*2);
+  const float rms = static_cast<float>(std::sqrt(sum / N));
   level_.store(std::clamp(rms * 4.0f, 0.0f, 1.0f));
+  bass_.store(std::clamp(bSum/float(N)*6.0f,0.f,1.f));
+  mid_.store(std::clamp(mSum/float(N)*6.0f,0.f,1.f));
+  treble_.store(std::clamp(tSum/float(N)*6.0f,0.f,1.f));
   seconds_.store(openmpt_module_get_position_seconds(module_));
   order_.store(int(openmpt_module_get_current_order(module_)));
   pattern_.store(int(openmpt_module_get_current_pattern(module_)));

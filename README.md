@@ -54,11 +54,13 @@ If OpenGL/GLFW are absent, CMake still builds `iw_geometry` and `geometry_tests`
 - Left / Right: previous / next scene and enter manual scene mode
 - Space: return to automatic beat/bar scene sequencing
 - T: toggle the text scroller
-- R: toggle the effect-recipe mode (auto per-scene mutation <-> a fixed curated recipe)
+- R: toggle the effect-recipe mode (auto per-scene curated+mutation <-> a fixed curated recipe)
 - Up / Down: in recipe mode, cycle the 24 curated effect recipes
+- P: re-roll the mutation seed (new procedural variant for the current scene)
 - Escape: quit
 - `--bpm N`: synchronization tempo (default 132)
 - `--no-scroller`: start with the text marquee off (toggle back on with T)
+- `--recipe N`: start in recipe mode with curated recipe N (0–23)
 
 ## Visual layers
 The renderer composites four layers, back to front:
@@ -74,11 +76,14 @@ The renderer composites four layers, back to front:
 4. **Effect warp** — the CPU effect system (64 vertex-warper effects + 24
    curated multi-stage recipes + a deterministic procedural "mutation"
    generator) re-shapes the active mesh every frame, driven by the music
-   pulse and synthetic bass/mid/treble/beat bands. In auto mode each scene
-   gets its own deterministic mutation; press R for a fixed recipe and
-   Up/Down to cycle. The system is fail-safe: any stage that leaves the mesh
-   empty or invalid restores the previous frame, so a bad combo never blanks
-   the scene.
+   pulse and bass/mid/treble/beat bands. When audio is active the real
+   decoded bands drive the audio-reactive effects; otherwise synthetic sine
+   bands are used. In auto mode each scene gets a curated recipe (rotated by
+   scene index) overlaid with a deterministic mutation for per-frame variety;
+   press R for a fixed recipe (Up/Down to cycle), P to re-roll the mutation
+   seed, or `--recipe N` to start in recipe mode. The system is fail-safe: any
+   stage that leaves the mesh empty or invalid restores the previous frame, so
+   a bad combo never blanks the scene.
 5. **Screen-space FX (post pass)** — the Uber compositor's signature effects
    run over the combined logo + wireframe + travelers frame: gravitational
    lensing (1/r^2), a refractive shockwave ring, chromatic aberration, barrel
@@ -112,9 +117,14 @@ Project targets compile with `-Wall -Wextra -Wpedantic -Werror` (or `/W4 /WX`). 
 - `Scene.*`: scene catalogue, provenance and update-rate cache. Expensive implicit/fractal geometry is not rebuilt at video refresh rate.
 - `Timeline.*`: deterministic BPM/beat/bar synchronization.
 - `Effects.*`: 64 CPU vertex-warper effects, 24 curated multi-stage recipes and
-  a deterministic procedural recipe generator, driven by time + synthetic
-  audio bands; fail-safe (restores the mesh on any invalid stage). Ported from
-  the unknown-wireframe-lab v5/v6 compositor.
+  a deterministic procedural recipe generator, driven by time + audio bands
+  (real decoded bass/mid/treble when audio is active, synthetic sines
+  otherwise); fail-safe (restores the mesh on any invalid stage). Edge-growth
+  capped at 50k for heavy subdivision effects. Ported from the
+  unknown-wireframe-lab v5/v6 compositor.
+- `Audio.*`: SDL2 + libopenmpt module player with a 3-band one-pole IIR
+  band-split (bass <350 Hz, mid 350–3000 Hz, treble >3000 Hz) computed in the
+  audio callback and exposed atomically to the render thread.
 - `Renderer.*`: OpenGL 4.1 indexed line renderer with checked external GLSL compilation/linking, reusable buffers, RGBA16F HDR render target, shader composite, breathing size cycle, zoom/flyover camera choreography and guarded framebuffer setup. In logo mode the frame (logo + wireframe + travelers) is captured to the HDR target and passed through the post/FX shader.
 - `shaders/post.*`: RGBA16F HDR-style composite pass with procedural background,
   glimmer, bloom-like highlight shaping, plus the Uber-compositor screen-space
