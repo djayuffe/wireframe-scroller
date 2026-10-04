@@ -21,7 +21,8 @@ float fontPix(float g, float x, float y){
   // 1x665 texture: u = (idx+0.5)/665, v = 0.5 (the single row).
   float v = texture(uFont, vec2((idx + 0.5)/665.0, 0.5)).r;
   // Extract bit `bit` of byte v: (v >> bit) & 1  ==  floor(v/2^bit) mod 2.
-  return fmod(floor(v / pow(2.0, bit)), 2.0);
+  // (GLSL built-in is `mod`, not C's `fmod` — Apple's stricter compiler rejects fmod.)
+  return mod(floor(v / pow(2.0, bit)), 2.0);
 }
 
 void main(){

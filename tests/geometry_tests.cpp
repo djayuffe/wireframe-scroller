@@ -5,11 +5,14 @@
 #include "TextScroller.hpp"
 #include "Timeline.hpp"
 #include "Effects.hpp"
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <set>
+#include <string>
 #include <vector>
 static void req(bool x,const char*m){if(!x){std::cerr<<"FAIL: "<<m<<"\n";std::exit(1);}}
 static void mesh(const Mesh3&m,const char*n,bool requireEdges=true){std::string w;req(geo::validate(m,&w),n);req(!m.v.empty(),n);if(requireEdges)req(!m.e.empty(),n);}
@@ -160,9 +163,42 @@ int main(){
        float tot=b+m+t; if(tot<1e-9f)return std::tuple<float,float,float>(0.f,0.f,0.f);
        return std::make_tuple(b/tot,m/tot,t/tot);
      };
-     auto[bl,ml,tl]=bandOf(100.f);   req(bl>ml&&bl>tl,"100Hz mostly bass");
-     auto[bm,mm,tm]=bandOf(1000.f);  req(mm>=bm&&mm>=tm,"1kHz mostly mid");
-     auto[bt,mt,tt]=bandOf(8000.f);   req(tt>=bt&&tt>=mt,"8kHz mostly treble");
-   }
-   std::cout<<"geometry_tests: PASS; exact 120-cell V="<<c120.v.size()<<" E="<<c120.e.size()<<"\n";
+      auto[bl,ml,tl]=bandOf(100.f);   req(bl>ml&&bl>tl,"100Hz mostly bass");
+      auto[bm,mm,tm]=bandOf(1000.f);  req(mm>=bm&&mm>=tm,"1kHz mostly mid");
+      auto[bt,mt,tt]=bandOf(8000.f);   req(tt>=bt&&tt>=mt,"8kHz mostly treble");
+    }
+    // Shader sanity: no C-specific math functions in GLSL (they're not GLSL
+    // builtins and Apple's stricter compiler rejects them — e.g. fmod, which
+    // broke the scroller shader on macOS). Scan every .vert/.frag for the
+    // common C names that have GLSL equivalents (mod/abs/min/max/pow/...).
+    {
+      const std::vector<std::string> bad={"fmod","fabs","fmin","fmax","sinf","cosf","tanf","sqrtf","floorf","ceilf","powf","expf","logf","atanf","asinf","acosf","fmodf"};
+      auto shadersDir=std::filesystem::path("shaders");
+      if(!std::filesystem::exists(shadersDir))shadersDir=std::filesystem::path(__FILE__).parent_path()/".." /"shaders";
+      for(const auto& entry:std::filesystem::directory_iterator(shadersDir)){
+        if(!entry.is_regular_file())continue;
+        auto ext=entry.path().extension().string();
+        if(ext!=".vert"&&ext!=".frag")continue;
+        std::ifstream f(entry.path()); std::string line;
+        while(std::getline(f,line)){
+          // strip // comments so a comment mentioning fmod doesn't false-positive
+          size_t c=line.find("//"); if(c!=std::string::npos)line=line.substr(0,c);
+          for(const auto& b:bad){
+            // word-boundary match (not part of a longer identifier)
+            size_t p=0;
+            while((p=line.find(b,p))!=std::string::npos){
+              bool lp=(p==0)||(!std::isalnum((unsigned char)line[p-1])&&line[p-1]!='_');
+              size_t e=p+b.size();
+              bool rp=(e>=line.size())||(!std::isalnum((unsigned char)line[e])&&line[e]!='_');
+              if(lp&&rp){std::cerr<<"FAIL: C-specific function '"<<b<<"' in shader "<<entry.path()<<" line: "<<line<<"\n";std::exit(1);}
+              p=e;
+            }
+          }
+        }
+      }
+      // the scroller shader must use the GLSL `mod` builtin for bit extraction
+      { std::ifstream f(shadersDir/"scroller.frag"); std::string all((std::istreambuf_iterator<char>(f)),std::istreambuf_iterator<char>());
+        req(all.find("mod(floor(v / pow(2.0, bit)), 2.0)")!=std::string::npos,"scroller uses GLSL mod builtin"); }
+    }
+    std::cout<<"geometry_tests: PASS; exact 120-cell V="<<c120.v.size()<<" E="<<c120.e.size()<<"\n";
  }
