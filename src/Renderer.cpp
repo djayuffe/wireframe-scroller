@@ -29,7 +29,17 @@ void mul(float*o,const float*a,const float*b){float r[16]{};for(int c=0;c<4;c++)
 // them. This is the fix for post/scroller/bg, which previously drew on empty
 // VAOs (invalid GL, nothing rendered).
 void setupFullscreenVao(unsigned& vao,unsigned& vbo){glGenVertexArrays(1,&vao);glGenBuffers(1,&vbo);glBindVertexArray(vao);glBindBuffer(GL_ARRAY_BUFFER,vbo);glBufferData(GL_ARRAY_BUFFER,0,nullptr,GL_STATIC_DRAW);glEnableVertexAttribArray(0);glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,0,nullptr);glBindVertexArray(0);}}
-bool Renderer::init(GLFWwindow*,const std::string&dir){std::string vs=readText(dir+"/wire.vert"),fs=readText(dir+"/wire.frag");if(vs.empty()||fs.empty()){error_="cannot read shaders from "+dir;return false;}program_=linkProgram(vs,fs,error_);if(!program_)return false;uMVP_=glGetUniformLocation(program_,"uMVP");uTime_=glGetUniformLocation(program_,"uTime");uColor_=glGetUniformLocation(program_,"uColor");uMusicLevel_=glGetUniformLocation(program_,"uMusicLevel");glGenVertexArrays(1,&vao_);glGenBuffers(1,&vbo_);glGenBuffers(1,&ebo_);if(!initPost(dir))return false;
+// Create all GL objects (programs, VAOs, buffers, textures, HDR FBO). Called by
+// init() and reinit() (after a context loss). Must run with a current context.
+bool Renderer::createGl(const std::string&dir){
+  std::string vs=readText(dir+"/wire.vert"),fs=readText(dir+"/wire.frag");
+  if(vs.empty()||fs.empty()){error_="cannot read shaders from "+dir;return false;}
+  program_=linkProgram(vs,fs,error_);
+  if(!program_)return false;
+  uMVP_=glGetUniformLocation(program_,"uMVP");uTime_=glGetUniformLocation(program_,"uTime");
+  uColor_=glGetUniformLocation(program_,"uColor");uMusicLevel_=glGetUniformLocation(program_,"uMusicLevel");
+  glGenVertexArrays(1,&vao_);glGenBuffers(1,&vbo_);glGenBuffers(1,&ebo_);
+  if(!initPost(dir))return false;
   // Non-fatal extras: scroller, logo background, traveling objects. A missing
   // shader degrades (no marquee / no background / no travelers) rather than
   // failing the app. drawScroller/drawBackground/drawTravelers early-return
@@ -38,6 +48,28 @@ bool Renderer::init(GLFWwindow*,const std::string&dir){std::string vs=readText(d
   initBackground(dir);
   initTravelers(dir);
   glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);return true;}
+bool Renderer::init(GLFWwindow*,const std::string&dir){
+  // Reset all GL object ids so createGl generates fresh ones. On a first init
+  // they're already 0; on a reinit after shutdown() they may be stale.
+  shutdown();
+  return createGl(dir);
+}
+// Re-create all GL objects after a context loss. The caller has already
+// re-makethe-context-current. Logo textures are re-loaded by the caller
+// (loadLogos) since they need the image data on disk.
+bool Renderer::reinit(const std::string&dir){
+  // Delete only the GL objects that survived the context loss (they're invalid
+  // handles now, but deleting them is the correct cleanup before re-creating).
+  // We do NOT touch the logo image data (logos_) — only their GL textures.
+  if(hdrFbo_)glDeleteFramebuffers(1,&hdrFbo_);
+  if(hdrTex_)glDeleteTextures(1,&hdrTex_);
+  if(depthRbo_)glDeleteRenderbuffers(1,&depthRbo_);
+  hdrFbo_=hdrTex_=depthRbo_=0;hdrW_=hdrH_=0;
+  for(auto&L:logos_)if(L.tex)glDeleteTextures(1,&L.tex),L.tex=0;
+  if(scrollerFontTex_)glDeleteTextures(1,&scrollerFontTex_),scrollerFontTex_=0;
+  bgTexA_=bgTexB_=0;bgCurrent_=bgTarget_=-1;bgMix_=0.f;hasLogos_=false;
+  return createGl(dir);
+}
 bool Renderer::initBackground(const std::string&dir){std::string vs=readText(dir+"/bg.vert"),fs=readText(dir+"/bg.frag");if(vs.empty()||fs.empty())return false;bgProgram_=linkProgram(vs,fs,error_);if(!bgProgram_)return false;uBgMix_=glGetUniformLocation(bgProgram_,"uMix");uBgZoom_=glGetUniformLocation(bgProgram_,"uZoom");uBgAspect_=glGetUniformLocation(bgProgram_,"uAspect");uBgTexAspect_=glGetUniformLocation(bgProgram_,"uTexAspect");uBgOp_=glGetUniformLocation(bgProgram_,"uOpacity");uBgTime_=glGetUniformLocation(bgProgram_,"uTime");uBgMusic_=glGetUniformLocation(bgProgram_,"uMusicLevel");uBgTexA_=glGetUniformLocation(bgProgram_,"uTexA");uBgTexB_=glGetUniformLocation(bgProgram_,"uTexB");setupFullscreenVao(bgVao_,bgVbo_);return true;}
 bool Renderer::initTravelers(const std::string&dir){std::string vs=readText(dir+"/traveler.vert"),fs=readText(dir+"/traveler.frag");if(vs.empty()||fs.empty())return false;travelerProgram_=linkProgram(vs,fs,error_);if(!travelerProgram_)return false;uTrMVP_=glGetUniformLocation(travelerProgram_,"uMVP");uTrTime_=glGetUniformLocation(travelerProgram_,"uTime");uTrColor_=glGetUniformLocation(travelerProgram_,"uColor");
   // Build 12 travelers, each a unit octahedron (6 verts, 12 edges), with a

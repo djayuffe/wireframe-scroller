@@ -23,10 +23,16 @@ public:
    bool drawTravelers(float time,int width,int height,float aspect,float scale,float musicLevel=0.f);
    // Logo mode: composite the fullscreen logo over the captured wireframe frame
    // and run the post/FX pass. Called after drawTravelers in the logo path.
-   bool finishLogoFrame(float time,int width,int height,int sceneIndex,float musicLevel=0.f);
-   void shutdown();
-  const std::string& error() const { return error_; }
-private:
+    bool finishLogoFrame(float time,int width,int height,int sceneIndex,float musicLevel=0.f);
+    // Re-create all GL objects after a context loss (GPU reset / driver crash).
+    // The caller has already re-makethe-context-current; this just rebuilds
+    // programs, VAOs, buffers, textures, and the HDR FBO. Logo textures are
+    // re-loaded by the caller (loadLogos) since they need the image data.
+    bool reinit(const std::string& shaderDir);
+    void shutdown();
+   const std::string& error() const { return error_; }
+ private:
+  bool createGl(const std::string& shaderDir);
   bool initPost(const std::string& shaderDir);
   bool resizeHdr(int width,int height);
   bool initScroller(const std::string& shaderDir);

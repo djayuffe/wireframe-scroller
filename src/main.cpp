@@ -16,13 +16,37 @@
 #include "Audio.hpp"
 #include "Effects.hpp"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <csignal>
 #include <filesystem>
 #include <string>
 #include <tuple>
+// Set by the SIGINT/SIGTERM handler; the render loop checks it each frame so
+// Ctrl-C / kill produces a clean shutdown (r.shutdown + audio.close + SDL/GLFW
+// teardown) rather than a hard kill that leaks GL resources.
+static std::atomic<bool> g_shutdown{false};
+static void onSignal(int){g_shutdown.store(true);}
+
+// Candidate directories for the UBER_Fullscreen_Logo_Pack, in priority order:
+// an explicit --logos override, the CWD, the executable's dir, then each
+// ancestor of the exe dir (covers build/ -> repo root). Used at startup and
+// again after a GL context loss (to re-load the logo textures).
+static std::vector<std::filesystem::path> logoCandidates(const std::filesystem::path& overrideDir,const std::filesystem::path& exeDir){
+  std::vector<std::filesystem::path> c;
+  if(!overrideDir.empty()) c.push_back(overrideDir);
+  c.push_back(std::filesystem::current_path()/"UBER_Fullscreen_Logo_Pack");
+  if(!exeDir.empty()){
+    c.push_back(exeDir/"UBER_Fullscreen_Logo_Pack");
+    auto p=exeDir;
+    while(p.has_parent_path()&&p.parent_path()!=p){ p=p.parent_path(); c.push_back(p/"UBER_Fullscreen_Logo_Pack"); }
+  }
+  return c;
+}
+
 int main(int argc,char**argv){
   double bpm=132.0;std::filesystem::path musicPath,logoOverride;bool noScroller=false;
   bool haveRecipe=false; int recipeArg=0;  // haveRecipe=false -> auto mode
@@ -33,6 +57,7 @@ int main(int argc,char**argv){
     else if(arg=="--no-scroller")noScroller=true;
     else if(arg=="--logos"&&i+1<argc)logoOverride=argv[++i];
     else if(arg=="--recipe"&&i+1<argc){recipeArg=std::atoi(argv[++i]);haveRecipe=true;}
+    else if(arg=="--version"){std::fprintf(stdout,"Impossible Wireframe v4.25\n");return 0;}
     else if(arg=="--help"||arg=="-h"){
       std::fprintf(stdout,
         "Impossible Wireframe v4.25\n"
@@ -50,6 +75,10 @@ int main(int argc,char**argv){
   // Validate --recipe: an out-of-range index would otherwise silently wrap
   // (recipe(N % count)) and the user would get a different recipe than asked.
   if(haveRecipe){ int n=recipeCount(); if(recipeArg<0||recipeArg>=n){ std::fprintf(stderr,"--recipe N must be in [0,%d] (got %d)\n",n-1,recipeArg); return 2; } }
+  // Clean shutdown on Ctrl-C / kill. The handler only sets an atomic flag
+  // (async-signal-safe); the render loop checks it and tears down GL/SDL.
+  std::signal(SIGINT,onSignal);
+  std::signal(SIGTERM,onSignal);
   if(musicPath.empty()){
    std::filesystem::path defaultMusic="assets/music/drozerix_-_silicon_dancer.mod";
    if(std::filesystem::exists(defaultMusic)) musicPath=defaultMusic;
@@ -84,34 +113,45 @@ int main(int argc,char**argv){
    }
      Renderer r;if(!r.init(w,shaderDir)){std::fprintf(stderr,"Renderer init failed: %s\n",r.error().c_str());audio.close();glfwDestroyWindow(w);glfwTerminate();return 3;}
     { // Load the UBER fullscreen logo pack as the animated background.
-     // The binary lives in build/, the pack in the project root. Search the
-     // exe dir, then walk up to an ancestor that contains the pack (covers
-     // build/ -> repo root), then the CWD.
-      std::vector<std::filesystem::path> candidates;
-      if(!logoOverride.empty()) candidates.push_back(logoOverride);
-      auto cwdPack=std::filesystem::current_path()/"UBER_Fullscreen_Logo_Pack";
-      candidates.push_back(cwdPack);
-      if(!exeDir.empty()) candidates.push_back(exeDir/"UBER_Fullscreen_Logo_Pack");
-      { auto p=exeDir; while(p.has_parent_path()&&p.parent_path()!=p){ p=p.parent_path(); candidates.push_back(p/"UBER_Fullscreen_Logo_Pack"); } }
-      bool loaded=false;
-      for(auto& c:candidates){ if(r.loadLogos(c.string())){ loaded=true; std::fprintf(stdout,"logos: %d cards from %s\n",r.logoCount(),c.string().c_str()); break; } }
-      if(!loaded){ std::fprintf(stderr,"warning: no UBER_Fullscreen_Logo_Pack found; tried:\n"); for(auto& c:candidates)std::fprintf(stderr,"  %s\n",c.string().c_str()); std::fprintf(stderr,"  -> running without logo background\n"); }
-    }
+       auto candidates=logoCandidates(logoOverride,exeDir);
+       bool loaded=false;
+       for(auto& c:candidates){ if(r.loadLogos(c.string())){ loaded=true; std::fprintf(stdout,"logos: %d cards from %s\n",r.logoCount(),c.string().c_str()); break; } }
+       if(!loaded){ std::fprintf(stderr,"warning: no UBER_Fullscreen_Logo_Pack found; tried:\n"); for(auto& c:candidates)std::fprintf(stderr,"  %s\n",c.string().c_str()); std::fprintf(stderr,"  -> running without logo background\n"); }
+     }
  Timeline timeline(bpm);SceneSystem scenes;uint64_t seed=0x49574f424a454354ull;int manual=-1,lastScene=-1,lastUploadScene=-1;bool prevL=false,prevR=false;const Mesh3* lastMesh=nullptr;std::tuple<size_t,size_t,float> lastMeshSig{0,0,-1.f};
     bool scrollerOn=!noScroller;
     // Per-scene effect recipe (the lab's 24 curated recipes) with an optional
     // procedural "mutation" rotation. R toggles recipe mode, +/- cycle it.
     bool recipeMode=haveRecipe, prevF=false, prevP=false; int recipeChoice=haveRecipe?recipeArg:0; uint32_t baseSeed=0x50454646ull;
     std::string lastRecipeName;  // recipe/effect name shown in the scroller
-    while(!glfwWindowShouldClose(w)){
+         while(!glfwWindowShouldClose(w) && !g_shutdown.load()){
     // A GPU reset / driver crash flips the context to lost; GLFW reports it
-    // once. Treat it as fatal (the GL state is gone — the app can't recover
-    // without a full re-init) rather than spinning on a dead context.
+    // once. Recover by re-makethe-context-current + re-creating all GL objects
+    // (reinit) + re-loading the logo textures. If recovery fails, exit cleanly.
     // GLFW_CONTEXT_LOST = 0x00020001 (not declared because we use
     // GLFW_INCLUDE_NONE, so GLFW's header doesn't pull in the GL constants).
     if(glfwGetWindowAttrib(w,0x00020001 /*GLFW_CONTEXT_LOST*/)){
-      std::fprintf(stderr,"GL context lost (GPU reset/driver crash); exiting\n");
-      break;
+      std::fprintf(stderr,"GL context lost (GPU reset/driver crash); attempting recovery\n");
+      bool recovered=false;
+      // GLFW 3: glfwMakeContextCurrent returns void; check glfwGetError after.
+      // (Some 3.x builds take a const char** for the description string.)
+      const char* desc=nullptr;
+      glfwMakeContextCurrent(w);
+      if(glfwGetError(&desc)==GLFW_NO_ERROR && r.reinit(shaderDir)){
+        // Re-load logo textures (the image data is still on disk; only the GL
+        // textures were lost). logoCandidates() re-derives the search list.
+        for(auto& c:logoCandidates(logoOverride,exeDir)){ if(r.loadLogos(c.string())){ recovered=true; break; } }
+      }
+      if(!recovered){ std::fprintf(stderr,"context recovery failed; exiting\n"); break; }
+      std::fprintf(stderr,"GL context recovered\n");
+      continue;
+    }
+    // Iconified (minimized) windows have no visible framebuffer; rendering is
+    // wasted work and on some drivers a no-op that can spam errors. Skip the
+    // frame and wait for the window to be restored.
+    if(glfwGetWindowAttrib(w,GLFW_ICONIFIED)){
+      glfwWaitEventsTimeout(.05);
+      continue;
     }
     double now=glfwGetTime();auto music=audio.state();double showSeconds=music.active?music.seconds:now;auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.level);int autoScene=int(sync.barIndex/2)%scenes.count();
    if(glfwGetKey(w,GLFW_KEY_T)==GLFW_PRESS){bool want=!scrollerOn;scrollerOn=want;}
