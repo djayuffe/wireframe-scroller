@@ -5,6 +5,9 @@ uniform sampler2D uScene;
 uniform vec2 uResolution;
 uniform float uTime;
 uniform float uMusicLevel;
+// 1.0 when a logo backdrop is in uScene (logo mode): skip the procedural
+// background and reduce the scene gain so the logo isn't washed out.
+uniform float uHasLogo;
 
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}
 float hash21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}
@@ -87,8 +90,12 @@ void main(){
   bg+=pal(uTime*.06+p.x*.025)*(matrixX+matrixY)*(.018+.075*uMusicLevel);
   bg+=pal(uTime*.05+.3)*glimmer;
 
-  vec3 hdr=bg+scene*1.35+bloom*(.55+uMusicLevel*1.15);
-  hdr+=pal(length(p)*.08+uTime*.02)*pow(max(scene.r,max(scene.g,scene.b)),2.2)*(.45+uMusicLevel);
+  // In logo mode the scene already contains the logo backdrop, so skip the
+  // procedural background (it would wash out the picture) and use a lower
+  // scene gain (the logo is 0-1, not a bright wireframe on black).
+  float hasLogo=step(.5,uHasLogo);
+  vec3 hdr=(1.0-hasLogo)*bg + scene*mix(1.35,1.0,hasLogo) + bloom*(.55+uMusicLevel*1.15);
+  hdr+=(1.0-hasLogo)*pal(length(p)*.08+uTime*.02)*pow(max(scene.r,max(scene.g,scene.b)),2.2)*(.45+uMusicLevel);
 
   // --- Uber-compositor signature FX ------------------------------------------
   // 5) SDF nested-triangle energy sculpture (screen space, pulsing).

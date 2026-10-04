@@ -132,14 +132,14 @@ int main(int argc,char**argv){
       applyRecipe(m,rc,ec,secondary);
     }
     auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);if(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig){if(!r.upload(m)){std::fprintf(stderr,"Mesh rejected in scene %d: %s\n",scene,r.error().c_str());break;}lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;}int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=std::max(.1f,geo::stats(m).radius);float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;
-      // 1) Wireframe. In logo mode draw() captures the wireframe into the HDR
-      //    FBO; in no-logo mode it runs the post/FX pass directly.
+      // 1) Wireframe. draw() captures into the HDR FBO (logo backdrop first in
+      //    logo mode, wireframe additive on top in both modes).
       if(!r.draw(float(showSeconds),W,H,float(W)/float(H),scene,std::min(1.48f,1.92f/rad)*sizeCycle,1.f+sync.pulse,music.level)){std::fprintf(stderr,"Renderer draw failed: %s\n",r.error().c_str());break;}
       // 2) Traveling objects weaving back and forth through the wireframe
-      //    (captured into the HDR FBO in logo mode).
+      //    (captured into the same HDR FBO).
       r.drawTravelers(float(showSeconds),W,H,float(W)/float(H),std::min(1.48f,1.92f/rad)*sizeCycle,music.level);
-      // 3) Logo mode: composite the fullscreen logo into the capture + run the
-      //    screen-space FX post pass over logo+wire+travelers.
+      // 3) Run the screen-space FX post pass over the captured frame
+      //    (logo+wire+travelers in logo mode, wire+travelers otherwise).
       r.finishLogoFrame(float(showSeconds),W,H,scene,music.level);
     // Fullscreen beat-synced text marquee: scene name + provenance + effect
     // recipe + BPM. Shown at the bottom of the screen as a news-ticker band.

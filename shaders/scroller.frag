@@ -56,16 +56,17 @@ void main(){
     }
   }
   // Beat pulse: sharp flash on the downbeat (uBeatPhase=0), decays to a soft
-  // floor. musicLevel adds a sustained glow.
-  float beatFlash = pow(1.0 - clamp(uBeatPhase,0.0,1.0), 3.0);   // 1 at downbeat, ->0
+  // floor. musicLevel adds a sustained glow. Scaled so col stays <= ~0.98 in
+  // the 8-bit default framebuffer (no white clipping on strong beats).
+  float beatFlash = pow(1.0 - clamp(uBeatPhase, 0.0, 1.0), 3.0);   // 1 at downbeat, ->0
   float music = clamp(uMusicLevel, 0.0, 1.0);
-  float pulse = 0.55 + 0.85 * beatFlash + 0.45 * music;
+  float pulse = 0.50 + 0.30 * beatFlash + 0.18 * music;            // max ~0.98
   // Color: cyan-white base, shifts to hot pink with music + a beat flash.
   vec3 base = vec3(0.45, 0.90, 1.00);
   vec3 hot  = vec3(1.00, 0.55, 0.95);
-  vec3 flash = vec3(1.00, 1.00, 1.10);
+  vec3 flash = vec3(1.00, 1.00, 1.00);
   vec3 col = mix(base, hot, music * 0.55 + beatFlash * 0.25);
-  col = mix(col, flash, beatFlash * 0.5);
+  col = mix(col, flash, beatFlash * 0.45);
   col *= pulse;
   // Soft vertical fade at the band edges (8 px).
   float edgeFade = smoothstep(0.0, 8.0, y - bandY0) * smoothstep(0.0, 8.0, (bandY0 + glyphH) - y);
