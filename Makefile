@@ -1,5 +1,7 @@
 # Convenience wrapper around the CMake build. The real build system is
-# CMakeLists.txt; this Makefile just gives you `make`-style targets.
+# CMakeLists.txt; this Makefile gives you `make`-style targets with a few
+# quality-of-life additions (auto-reconfigure when the cache goes stale,
+# parallel builds, and a `diag` target that dumps the resolved toolchain).
 #
 # Usage:
 #   make            # configure + build (Release)
@@ -8,12 +10,16 @@
 #   make run-pulse  # launch with the CC0 Wireframe Pulse track
 #   make clean      # remove the build/ directory
 #   make reconfigure# force a fresh CMake configure (new build dir)
+#   make diag       # dump the resolved compiler / SDK / GLFW / SDL2 / openmpt
+#   make help       # show this list
 #
 # Extra CMake flags can be passed as CMAKE_EXTRA, e.g.:
 #   make CMAKE_EXTRA=-DIW_WARNINGS_AS_ERRORS=OFF
+#   make reconfigure CMAKE_EXTRA=-DIW_SYSROOT=$(xcrun --show-sdk-path)
 #
 # To build audio in, the toolchain must expose SDL2 + libopenmpt via
-# CMake/PkgConfig (brew install sdl2 libopenmpt on macOS; the CI does this).
+# CMake/PkgConfig (brew install sdl2 libopenmpt on macOS;
+# apt install libsdl2-dev libopenmpt-dev on Linux; the CI does this).
 
 BUILD_DIR   ?= build
 TYPE        ?= Release
@@ -22,24 +28,45 @@ CMAKE       ?= cmake
 CTEST       ?= ctest
 BIN         := $(BUILD_DIR)/impossible_wireframe
 
-.PHONY: all configure build test run run-pulse clean reconfigure help
+# Common CMake flags. -DIW_BUILD_TESTS=ON is explicit so a user who disables
+# tests has to do so deliberately. CMAKE_EXTRA is appended last so it can
+# override anything above.
+CMAKE_FLAGS := -DCMAKE_BUILD_TYPE=$(TYPE) -DIW_BUILD_TESTS=ON $(CMAKE_EXTRA)
+
+# Fingerprint of the inputs that should trigger a reconfigure: the generator,
+# CMakeLists.txt, and the build type. If any changes, the cache is stale and
+# we reconfigure automatically. (A full hash of every source would be overkill;
+# CMake itself re-runs when CMakeLists.txt changes — this is a backstop for
+# the build-type / generator case.)
+STAMP := $(BUILD_DIR)/.stamp
+CMAKE_STAMP_SRC := CMakeLists.txt Makefile
+
+.PHONY: all configure build test run run-pulse clean reconfigure diag help stamp
 
 all: build
 
-# configure always wipes the build dir first. A stale CMake cache can hold an
-# SDK path (CMAKE_OSX_SYSROOT / a baked OpenGL.framework / .tbd location) that
-# no longer matches the installed Command Line Tools, which produces linker
-# errors like "tapi error: malformed file .../libSystem.B.tbd ... unknown
-# architecture" (this breaks even CMake's compiler check). A fresh configure
-# re-resolves the SDK cleanly; CMakeLists pins CMAKE_OSX_ARCHITECTURES to the
-# host and CMAKE_OSX_SYSROOT to xcrun's SDK. To pin a specific SDK:
-#   make reconfigure CMAKE_EXTRA=-DIW_SYSROOT=$(xcrun --show-sdk-path)
+stamp:
+	@mkdir -p $(BUILD_DIR)
+	@# Reconfigure if the build dir is missing, the generator changed, or the
+	@# CMakeLists/Makefile/build-type stamp is older than the sources.
+	@if [ ! -d $(BUILD_DIR) ] || \
+	    [ ! -f $(BUILD_DIR)/CMakeCache.txt ] || \
+	    [ ! -f $(STAMP) ] || \
+	    [ $(STAMP) -ot CMakeLists.txt ] || \
+	    [ $(STAMP) -ot Makefile ]; then \
+	  rm -rf $(BUILD_DIR); \
+	  $(CMAKE) -S . -B $(BUILD_DIR) $(CMAKE_FLAGS); \
+	  date > $(STAMP); \
+	else \
+	  echo "build/ up to date — reusing existing cache"; \
+	fi
+
 configure:
 	rm -rf $(BUILD_DIR)
-	$(CMAKE) -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=$(TYPE) $(CMAKE_EXTRA)
+	$(CMAKE) -S . -B $(BUILD_DIR) $(CMAKE_FLAGS)
+	@date > $(STAMP)
 
-build:
-	@test -d $(BUILD_DIR) || $(MAKE) configure
+build: stamp
 	$(CMAKE) --build $(BUILD_DIR) --parallel $(NPROC)
 
 test: build
@@ -54,9 +81,46 @@ run-pulse: build
 clean:
 	rm -rf $(BUILD_DIR)
 
-reconfigure: clean
-	$(MAKE) configure
+reconfigure:
+	rm -rf $(BUILD_DIR)
+	$(CMAKE) -S . -B $(BUILD_DIR) $(CMAKE_FLAGS)
+	@date > $(STAMP)
+
+# Dump the resolved toolchain: compiler, SDK (macOS), and each detected
+# dependency target. Useful for diagnosing "why didn't audio get built in?".
+diag: stamp
+	@echo "--- CMake version ---"
+	@$(CMAKE) --version | head -1
+	@echo "--- Build type ---"
+	@grep -E 'CMAKE_BUILD_TYPE' $(BUILD_DIR)/CMakeCache.txt || echo "(default)"
+	@echo "--- macOS SDK (if applicable) ---"
+	@grep -E 'CMAKE_OSX_SYSROOT|CMAKE_OSX_ARCHITECTURES' $(BUILD_DIR)/CMakeCache.txt || echo "(not macOS)"
+	@echo "--- GLFW target ---"
+	@grep -E 'GLFW3_DIR|GlfwFallback|GLFW_INCLUDE_DIR|GLFW_LIBRARY' $(BUILD_DIR)/CMakeCache.txt || echo "(none found)"
+	@echo "--- SDL2 target ---"
+	@grep -E 'SDL2_DIR|SDL2_INCLUDE_DIR|SDL2_LIBRARY|PkgConfig' $(BUILD_DIR)/CMakeCache.txt | head -5 || echo "(none found)"
+	@echo "--- libopenmpt target ---"
+	@grep -E 'OPENMPT_INCLUDE_DIR|OPENMPT_LIBRARY|libopenmpt' $(BUILD_DIR)/CMakeCache.txt || echo "(none found)"
+	@echo "--- OpenGL target (macOS) ---"
+	@grep -E 'IW_OPENGL_LIB|IW_OPENGL_INCLUDE_DIR|OPENGL_INCLUDE_DIR' $(BUILD_DIR)/CMakeCache.txt || echo "(none found)"
 
 help:
-	@echo "Targets: all build configure test run run-pulse clean reconfigure help"
-	@echo "Vars:    BUILD_DIR TYPE NPROC CMAKE CTEST CMAKE_EXTRA"
+	@echo "Targets:"
+	@echo "  all / build     Configure (if needed) + build (Release, parallel)"
+	@echo "  test            Build + run ctest"
+	@echo "  run             Build + launch (default music, 132 bpm)"
+	@echo "  run-pulse       Build + launch with the CC0 Wireframe Pulse track"
+	@echo "  configure       Wipe build/ and reconfigure"
+	@echo "  reconfigure     Alias for configure"
+	@echo "  diag            Dump the resolved toolchain (SDK, GLFW, SDL2, openmpt)"
+	@echo "  clean           Remove build/"
+	@echo "  help            This message"
+	@echo ""
+	@echo "Vars:"
+	@echo "  BUILD_DIR=build  Output directory"
+	@echo "  TYPE=Release     CMake build type"
+	@echo "  NPROC=$(NPROC)          Parallelism"
+	@echo "  CMAKE=cmake        CMake binary"
+	@echo "  CTEST=ctest        ctest binary"
+	@echo "  CMAKE_EXTRA=       Extra CMake flags (e.g. -DIW_WARNINGS_AS_ERRORS=ON,"
+	@echo "                     -DIW_SYSROOT=\$$(xcrun --show-sdk-path))"

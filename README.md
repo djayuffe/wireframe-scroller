@@ -26,11 +26,22 @@ The build system is CMake. A `Makefile` wraps it for convenience — the
 simplest path is just:
 
 ```sh
-make            # configure + build (Release)
+make            # configure (if needed) + build (Release, parallel)
 make test       # build + run the geometry/scroller tests
 make run        # build + launch (default music, 132 bpm)
 make run-pulse  # launch with the CC0 Wireframe Pulse track
+make diag       # dump the resolved toolchain (SDK, GLFW, SDL2, openmpt)
 make clean      # remove the build/ directory
+make reconfigure# wipe build/ and reconfigure (recover from a stale cache)
+```
+
+The Makefile auto-reconfigures when `CMakeLists.txt` or the build type changes
+(a stamp file tracks this), so a stale cache rarely needs manual cleanup. To
+pin a specific macOS SDK or enable strict warnings:
+
+```sh
+make reconfigure CMAKE_EXTRA=-DIW_SYSROOT=$(xcrun --show-sdk-path)
+make CMAKE_EXTRA=-DIW_WARNINGS_AS_ERRORS=ON
 ```
 
 Or use CMake directly (macOS via Homebrew):
