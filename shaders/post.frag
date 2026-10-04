@@ -34,10 +34,12 @@ void main(){
 
   // --- Screen-space UV warps (applied to the scene sample) -------------------
   vec2 suv=uv;
-  // 1) Gravitational lensing: true 1/r^2 central magnification.
-  { vec2 cp=suv-.5; float rr=max(length(cp),.035);
-    float lens=.35+.65*beat;
-    suv=.5+cp*(1.0+lens*.035/(rr*rr)); }
+   // 1) Gravitational lensing: true 1/r^2 central magnification.
+   // Clamp the displaced UV to [0,1] — near the center the magnification can
+   // push it well outside the buffer, which would sample clamped black borders.
+   { vec2 cp=suv-.5; float rr=max(length(cp),.035);
+     float lens=.35+.65*beat;
+     suv=clamp(.5+cp*(1.0+lens*.035/(rr*rr)),0.0,1.0); }
   // 2) Refractive shockwave ring: a Gaussian ring that displaces the image.
   { float shock=fract(uTime*.145);
     float r=length(suv-.5);
@@ -107,8 +109,10 @@ void main(){
   { float holo=.5+.5*sin(uTime*.3);
     hdr+=holo*.04*vec3(sin(uv.x*90.+uTime*4.)*.5+.5,sin(uv.y*90.+uTime*4.+2.1)*.5+.5,sin((uv.x+uv.y)*90.+uTime*4.+4.2)*.5+.5); }
   // 7) Glitch slices (hash-driven horizontal displacement, beat-gated).
+  // Gated off in logo mode: re-sampling uScene would re-inject the logo's
+  // premultiplied RGB as an uncontrolled horizontal double-exposure.
   { float slice=step(.97,hash21(vec2(floor(uv.y*90.),floor(uTime*12.))));
-    hdr+=slice*beat*texture(uScene,vec2(fract(uv.x+.025*sin(uTime*17.)),uv.y)).rgb*.4; }
+    hdr+=slice*beat*(1.0-hasLogo)*texture(uScene,vec2(fract(uv.x+.025*sin(uTime*17.)),uv.y)).rgb*.4; }
 
   // 8) Scanlines / interlace (subtle, always on).
   hdr*=.985+.015*sin(gl_FragCoord.y*3.14159);

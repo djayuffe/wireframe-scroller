@@ -12,7 +12,23 @@ jobs:
       - name: Install dependencies
         run: brew install cmake glfw sdl2 libopenmpt pkg-config
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DIW_BUILD_TESTS=ON
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DIW_BUILD_TESTS=ON -DIW_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+  linux:
+    # Exercises the non-Apple path (OpenGL::GL + <GL/gl.h>) which macOS CI never
+    # covers. Needs a GL library for linking the renderer.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ ninja-build libglfw3-dev libgl-dev libgl1-mesa-dev libsdl2-dev libopenmpt-dev pkg-config
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DIW_BUILD_TESTS=ON -DIW_WARNINGS_AS_ERRORS=ON
       - name: Build
         run: cmake --build build --parallel
       - name: Test

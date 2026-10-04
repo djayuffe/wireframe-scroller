@@ -21,14 +21,24 @@ namespace {std::string readText(const std::string&p){std::ifstream f(p);if(!f)re
 bool shader(GLuint&out,GLenum type,const std::string&s,std::string&err){out=glCreateShader(type);const char*p=s.c_str();glShaderSource(out,1,&p,nullptr);glCompileShader(out);GLint ok=0;glGetShaderiv(out,GL_COMPILE_STATUS,&ok);if(!ok){GLint n=0;glGetShaderiv(out,GL_INFO_LOG_LENGTH,&n);std::string log(std::max(1,n),'\0');glGetShaderInfoLog(out,n,nullptr,log.data());err=log;glDeleteShader(out);out=0;return false;}return true;}
 GLuint linkProgram(const std::string&vs,const std::string&fs,std::string&err){GLuint v=0,f=0;if(!shader(v,GL_VERTEX_SHADER,vs,err)||!shader(f,GL_FRAGMENT_SHADER,fs,err)){if(v)glDeleteShader(v);if(f)glDeleteShader(f);return 0;}GLuint p=glCreateProgram();glAttachShader(p,v);glAttachShader(p,f);glLinkProgram(p);glDeleteShader(v);glDeleteShader(f);GLint ok=0;glGetProgramiv(p,GL_LINK_STATUS,&ok);if(!ok){GLint n=0;glGetProgramiv(p,GL_INFO_LOG_LENGTH,&n);err.resize(std::max(1,n));glGetProgramInfoLog(p,n,nullptr,err.data());glDeleteProgram(p);return 0;}return p;}
 void perspective(float*m,float fovy,float aspect,float zn,float zf){float f=1/std::tan(fovy*.5f);for(int i=0;i<16;i++)m[i]=0;m[0]=f/aspect;m[5]=f;m[10]=(zf+zn)/(zn-zf);m[11]=-1;m[14]=(2*zf*zn)/(zn-zf);}
-void mul(float*o,const float*a,const float*b){float r[16]{};for(int c=0;c<4;c++)for(int rr=0;rr<4;rr++)for(int k=0;k<4;k++)r[c*4+rr]+=a[k*4+rr]*b[c*4+k];std::copy(r,r+16,o);}}
-bool Renderer::init(GLFWwindow*,const std::string&dir){std::string vs=readText(dir+"/wire.vert"),fs=readText(dir+"/wire.frag");if(vs.empty()||fs.empty()){error_="cannot read shaders from "+dir;return false;}program_=linkProgram(vs,fs,error_);if(!program_)return false;uMVP_=glGetUniformLocation(program_,"uMVP");uTime_=glGetUniformLocation(program_,"uTime");uColor_=glGetUniformLocation(program_,"uColor");uMusicLevel_=glGetUniformLocation(program_,"uMusicLevel");glGenVertexArrays(1,&vao_);glGenBuffers(1,&vbo_);glGenBuffers(1,&ebo_);glGenVertexArrays(1,&postVao_);if(!initPost(dir))return false;if(!initScroller(dir)){std::string scerr=error_;error_="scroller shader failed (non-fatal): "+scerr;return false;}
-  // Non-fatal extras: logo background + traveling objects. A missing shader
-  // degrades to "no background"/"no travelers" rather than failing the app.
+void mul(float*o,const float*a,const float*b){float r[16]{};for(int c=0;c<4;c++)for(int rr=0;rr<4;rr++)for(int k=0;k<4;k++)r[c*4+rr]+=a[k*4+rr]*b[c*4+k];std::copy(r,r+16,o);}
+// Set up a VAO for the "no-VBO fullscreen triangle" idiom (the vertex shader
+// generates positions from gl_VertexID). glDrawArrays on a VAO with NO enabled
+// vertex attribute is GL_INVALID_OPERATION, so a 0-byte ARRAY_BUFFER + a
+// dummy vertex attribute pointer are required even though the shader ignores
+// them. This is the fix for post/scroller/bg, which previously drew on empty
+// VAOs (invalid GL, nothing rendered).
+void setupFullscreenVao(unsigned& vao,unsigned& vbo){glGenVertexArrays(1,&vao);glGenBuffers(1,&vbo);glBindVertexArray(vao);glBindBuffer(GL_ARRAY_BUFFER,vbo);glBufferData(GL_ARRAY_BUFFER,0,nullptr,GL_STATIC_DRAW);glEnableVertexAttribArray(0);glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,0,nullptr);glBindVertexArray(0);}}
+bool Renderer::init(GLFWwindow*,const std::string&dir){std::string vs=readText(dir+"/wire.vert"),fs=readText(dir+"/wire.frag");if(vs.empty()||fs.empty()){error_="cannot read shaders from "+dir;return false;}program_=linkProgram(vs,fs,error_);if(!program_)return false;uMVP_=glGetUniformLocation(program_,"uMVP");uTime_=glGetUniformLocation(program_,"uTime");uColor_=glGetUniformLocation(program_,"uColor");uMusicLevel_=glGetUniformLocation(program_,"uMusicLevel");glGenVertexArrays(1,&vao_);glGenBuffers(1,&vbo_);glGenBuffers(1,&ebo_);if(!initPost(dir))return false;
+  // Non-fatal extras: scroller, logo background, traveling objects. A missing
+  // shader degrades (no marquee / no background / no travelers) rather than
+  // failing the app. drawScroller/drawBackground/drawTravelers early-return
+  // when their program is 0.
+  if(!initScroller(dir))error_="scroller shader unavailable (no marquee): "+error_;
   initBackground(dir);
   initTravelers(dir);
   glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);return true;}
-bool Renderer::initBackground(const std::string&dir){std::string vs=readText(dir+"/bg.vert"),fs=readText(dir+"/bg.frag");if(vs.empty()||fs.empty())return false;bgProgram_=linkProgram(vs,fs,error_);if(!bgProgram_)return false;uBgMix_=glGetUniformLocation(bgProgram_,"uMix");uBgZoom_=glGetUniformLocation(bgProgram_,"uZoom");uBgAspect_=glGetUniformLocation(bgProgram_,"uAspect");uBgTexAspect_=glGetUniformLocation(bgProgram_,"uTexAspect");uBgOp_=glGetUniformLocation(bgProgram_,"uOpacity");uBgTime_=glGetUniformLocation(bgProgram_,"uTime");uBgMusic_=glGetUniformLocation(bgProgram_,"uMusicLevel");uBgTexA_=glGetUniformLocation(bgProgram_,"uTexA");uBgTexB_=glGetUniformLocation(bgProgram_,"uTexB");glGenVertexArrays(1,&bgVao_);return true;}
+bool Renderer::initBackground(const std::string&dir){std::string vs=readText(dir+"/bg.vert"),fs=readText(dir+"/bg.frag");if(vs.empty()||fs.empty())return false;bgProgram_=linkProgram(vs,fs,error_);if(!bgProgram_)return false;uBgMix_=glGetUniformLocation(bgProgram_,"uMix");uBgZoom_=glGetUniformLocation(bgProgram_,"uZoom");uBgAspect_=glGetUniformLocation(bgProgram_,"uAspect");uBgTexAspect_=glGetUniformLocation(bgProgram_,"uTexAspect");uBgOp_=glGetUniformLocation(bgProgram_,"uOpacity");uBgTime_=glGetUniformLocation(bgProgram_,"uTime");uBgMusic_=glGetUniformLocation(bgProgram_,"uMusicLevel");uBgTexA_=glGetUniformLocation(bgProgram_,"uTexA");uBgTexB_=glGetUniformLocation(bgProgram_,"uTexB");setupFullscreenVao(bgVao_,bgVbo_);return true;}
 bool Renderer::initTravelers(const std::string&dir){std::string vs=readText(dir+"/traveler.vert"),fs=readText(dir+"/traveler.frag");if(vs.empty()||fs.empty())return false;travelerProgram_=linkProgram(vs,fs,error_);if(!travelerProgram_)return false;uTrMVP_=glGetUniformLocation(travelerProgram_,"uMVP");uTrTime_=glGetUniformLocation(travelerProgram_,"uTime");uTrColor_=glGetUniformLocation(travelerProgram_,"uColor");
   // Build 12 travelers, each a unit octahedron (6 verts, 12 edges), with a
   // per-vertex path attribute.
@@ -61,22 +71,25 @@ bool Renderer::initTravelers(const std::string&dir){std::string vs=readText(dir+
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(1,1,GL_FLOAT,GL_FALSE,16,(void*)(12));
   glEnableVertexAttribArray(1);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,travelerEbo_);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER,idx.size()*sizeof(uint32_t),idx.data(),GL_STATIC_DRAW);
-  glBindVertexArray(0);
-  return true;}
-bool Renderer::initScroller(const std::string&dir){std::string vs=readText(dir+"/scroller.vert"),fs=readText(dir+"/scroller.frag");if(vs.empty()||fs.empty()){error_="cannot read scroller shaders";return false;}scrollerProgram_=linkProgram(vs,fs,error_);if(!scrollerProgram_)return false;uScTime_=glGetUniformLocation(scrollerProgram_,"uTime");uScPhase_=glGetUniformLocation(scrollerProgram_,"uBeatPhase");uScRes_=glGetUniformLocation(scrollerProgram_,"uResolution");uScMusic_=glGetUniformLocation(scrollerProgram_,"uMusicLevel");uScOffset_=glGetUniformLocation(scrollerProgram_,"uScrollOffset");uScTextWidth_=glGetUniformLocation(scrollerProgram_,"uTextWidth");uScFont_=glGetUniformLocation(scrollerProgram_,"uFont");uScOpacity_=glGetUniformLocation(scrollerProgram_,"uOpacity");glGenVertexArrays(1,&scrollerVao_);glGenTextures(1,&scrollerFontTex_);auto data=textfont::pack();
+   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,travelerEbo_);
+   glBufferData(GL_ELEMENT_ARRAY_BUFFER,idx.size()*sizeof(uint32_t),idx.data(),GL_STATIC_DRAW);
+   travelerEdgeCount_=(int)idx.size();
+   glBindVertexArray(0);
+   return true;}
+bool Renderer::initScroller(const std::string&dir){std::string vs=readText(dir+"/scroller.vert"),fs=readText(dir+"/scroller.frag");if(vs.empty()||fs.empty()){error_="cannot read scroller shaders";return false;}scrollerProgram_=linkProgram(vs,fs,error_);if(!scrollerProgram_)return false;uScTime_=glGetUniformLocation(scrollerProgram_,"uTime");uScPhase_=glGetUniformLocation(scrollerProgram_,"uBeatPhase");uScRes_=glGetUniformLocation(scrollerProgram_,"uResolution");uScMusic_=glGetUniformLocation(scrollerProgram_,"uMusicLevel");uScOffset_=glGetUniformLocation(scrollerProgram_,"uScrollOffset");uScTextWidth_=glGetUniformLocation(scrollerProgram_,"uTextWidth");uScFont_=glGetUniformLocation(scrollerProgram_,"uFont");uScOpacity_=glGetUniformLocation(scrollerProgram_,"uOpacity");setupFullscreenVao(scrollerVao_,scrollerVbo_);glGenTextures(1,&scrollerFontTex_);auto data=textfont::pack();
     // 1x665 GL_R8 GL_TEXTURE_2D (NOT 1D — Apple's Metal-based OpenGL driver
     // does not support 1D textures; glTexImage1D is a silent no-op there).
-    glBindTexture(GL_TEXTURE_2D,scrollerFontTex_);
-    glTexImage2D(GL_TEXTURE_2D,0,GL_R8,(GLsizei)data.size(),1,0,GL_RED,GL_UNSIGNED_BYTE,data.data());
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+     glBindTexture(GL_TEXTURE_2D,scrollerFontTex_);
+     glPixelStorei(GL_UNPACK_ALIGNMENT,1);  // row=665 bytes, not a multiple of 4
+     glTexImage2D(GL_TEXTURE_2D,0,GL_R8,(GLsizei)data.size(),1,0,GL_RED,GL_UNSIGNED_BYTE,data.data());
+     glPixelStorei(GL_UNPACK_ALIGNMENT,4);
+     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D,0);
     return true;}
-bool Renderer::initPost(const std::string&dir){std::string vs=readText(dir+"/post.vert"),fs=readText(dir+"/post.frag");if(vs.empty()||fs.empty()){error_="cannot read post shaders from "+dir;return false;}postProgram_=linkProgram(vs,fs,error_);if(!postProgram_)return false;uPostScene_=glGetUniformLocation(postProgram_,"uScene");uPostTime_=glGetUniformLocation(postProgram_,"uTime");uPostResolution_=glGetUniformLocation(postProgram_,"uResolution");uPostMusic_=glGetUniformLocation(postProgram_,"uMusicLevel");uPostHasLogo_=glGetUniformLocation(postProgram_,"uHasLogo");glUseProgram(postProgram_);if(uPostScene_>=0)glUniform1i(uPostScene_,0);return true;}
+bool Renderer::initPost(const std::string&dir){std::string vs=readText(dir+"/post.vert"),fs=readText(dir+"/post.frag");if(vs.empty()||fs.empty()){error_="cannot read post shaders from "+dir;return false;}postProgram_=linkProgram(vs,fs,error_);if(!postProgram_)return false;uPostScene_=glGetUniformLocation(postProgram_,"uScene");uPostTime_=glGetUniformLocation(postProgram_,"uTime");uPostResolution_=glGetUniformLocation(postProgram_,"uResolution");uPostMusic_=glGetUniformLocation(postProgram_,"uMusicLevel");uPostHasLogo_=glGetUniformLocation(postProgram_,"uHasLogo");setupFullscreenVao(postVao_,postVbo_);glUseProgram(postProgram_);if(uPostScene_>=0)glUniform1i(uPostScene_,0);return true;}
 bool Renderer::resizeHdr(int width,int height){width=std::max(1,width);height=std::max(1,height);if(width==hdrW_&&height==hdrH_&&hdrFbo_)return true;hdrW_=width;hdrH_=height;if(!hdrFbo_)glGenFramebuffers(1,&hdrFbo_);if(!hdrTex_)glGenTextures(1,&hdrTex_);if(!depthRbo_)glGenRenderbuffers(1,&depthRbo_);glBindTexture(GL_TEXTURE_2D,hdrTex_);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA16F,width,height,0,GL_RGBA,GL_FLOAT,nullptr);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);glBindRenderbuffer(GL_RENDERBUFFER,depthRbo_);glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT24,width,height);glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,hdrTex_,0);glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,depthRbo_);if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE){error_="HDR framebuffer incomplete";glBindFramebuffer(GL_FRAMEBUFFER,0);return false;}glBindFramebuffer(GL_FRAMEBUFFER,0);return true;}
 bool Renderer::upload(const Mesh3&m){std::string why;if(!geo::validate(m,&why)){error_=why;return false;}std::vector<uint32_t>ix;ix.reserve(m.e.size()*2);for(auto e:m.e){ix.push_back(e.a);ix.push_back(e.b);}edgeCount_=(int)ix.size();glBindVertexArray(vao_);glBindBuffer(GL_ARRAY_BUFFER,vbo_);size_t vb=m.v.size()*sizeof(V3);if(vb>vboCapacity_){vboCapacity_=std::max(vb,vboCapacity_*2+4096);glBufferData(GL_ARRAY_BUFFER,vboCapacity_,nullptr,GL_DYNAMIC_DRAW);}if(vb)glBufferSubData(GL_ARRAY_BUFFER,0,vb,m.v.data());glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(V3),nullptr);glEnableVertexAttribArray(0);glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo_);size_t eb=ix.size()*sizeof(uint32_t);if(eb>eboCapacity_){eboCapacity_=std::max(eb,eboCapacity_*2+4096);glBufferData(GL_ELEMENT_ARRAY_BUFFER,eboCapacity_,nullptr,GL_DYNAMIC_DRAW);}if(eb)glBufferSubData(GL_ELEMENT_ARRAY_BUFFER,0,eb,ix.data());return true;}
 bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,float scale,float lineWidth,float musicLevel){if(!resizeHdr(width,height))return false;float ml=std::clamp(musicLevel,0.f,1.f);
@@ -94,6 +107,7 @@ bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,flo
     // (finishLogoFrame) over the combined buffer.
     glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);
     glViewport(0,0,width,height);
+    glClearColor(0,0,0,1);
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
     // 1) Logo backdrop (full-screen, opaque, no depth).
     drawBackground(t,width,height,sceneIndex,ml,true);
@@ -172,8 +186,11 @@ bool Renderer::drawBackground(float time,int width,int height,int sceneIndex,flo
   glUseProgram(bgProgram_);
   if(uBgMix_>=0)glUniform1f(uBgMix_,bgMix_);
   if(uBgZoom_>=0)glUniform1f(uBgZoom_,zoom);
-  if(uBgAspect_>=0)glUniform1f(uBgAspect_,float(width)/std::max(1.f,float(height)));
-  if(uBgTexAspect_>=0)glUniform2f(uBgTexAspect_,1920.f,1080.f);
+   if(uBgAspect_>=0)glUniform1f(uBgAspect_,float(width)/std::max(1.f,float(height)));
+   // Use the actual logo dimensions (all cards are 1920x1080 today, but don't
+   // hard-code it — a non-standard card would be distorted).
+   const auto& cur=logos_[bgCurrent_>=0?bgCurrent_:0];
+   if(uBgTexAspect_>=0)glUniform2f(uBgTexAspect_,(float)std::max(1,cur.w),(float)std::max(1,cur.h));
   if(uBgOp_>=0)glUniform1f(uBgOp_,1.0f);
   if(uBgTime_>=0)glUniform1f(uBgTime_,time);
   if(uBgMusic_>=0)glUniform1f(uBgMusic_,std::clamp(musicLevel,0.f,1.f));
@@ -226,7 +243,7 @@ bool Renderer::drawTravelers(float time,int width,int height,float aspect,float 
   glLineWidth(1.4f+std::clamp(musicLevel,0.f,1.f)*1.0f);
   if(hasLogos_){glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);glBlendEquation(GL_FUNC_ADD);}
   glBindVertexArray(travelerVao_);
-  glDrawElements(GL_LINES,144,GL_UNSIGNED_INT,nullptr);
+  glDrawElements(GL_LINES,(GLsizei)travelerEdgeCount_,GL_UNSIGNED_INT,nullptr);
   if(hasLogos_)glDisable(GL_BLEND);
   return true;
 }
@@ -280,4 +297,4 @@ bool Renderer::drawScroller(float time,float beatPhase,int width,int height,cons
   glActiveTexture(GL_TEXTURE0);
   return true;
 }
-void Renderer::shutdown(){for(auto&L:logos_)if(L.tex)glDeleteTextures(1,&L.tex);logos_.clear();if(scrollerFontTex_)glDeleteTextures(1,&scrollerFontTex_);if(hdrFbo_)glDeleteFramebuffers(1,&hdrFbo_);if(hdrTex_)glDeleteTextures(1,&hdrTex_);if(depthRbo_)glDeleteRenderbuffers(1,&depthRbo_);if(postProgram_)glDeleteProgram(postProgram_);if(postVao_)glDeleteVertexArrays(1,&postVao_);if(scrollerProgram_)glDeleteProgram(scrollerProgram_);if(scrollerVao_)glDeleteVertexArrays(1,&scrollerVao_);if(bgProgram_)glDeleteProgram(bgProgram_);if(bgVao_)glDeleteVertexArrays(1,&bgVao_);if(travelerProgram_)glDeleteProgram(travelerProgram_);if(travelerVao_)glDeleteVertexArrays(1,&travelerVao_);if(travelerVbo_)glDeleteBuffers(1,&travelerVbo_);if(travelerEbo_)glDeleteBuffers(1,&travelerEbo_);if(program_)glDeleteProgram(program_);if(ebo_)glDeleteBuffers(1,&ebo_);if(vbo_)glDeleteBuffers(1,&vbo_);if(vao_)glDeleteVertexArrays(1,&vao_);program_=postProgram_=scrollerProgram_=bgProgram_=travelerProgram_=vao_=postVao_=scrollerVao_=bgVao_=travelerVao_=vbo_=ebo_=travelerVbo_=travelerEbo_=scrollerFontTex_=hdrFbo_=hdrTex_=depthRbo_=0;}
+void Renderer::shutdown(){for(auto&L:logos_)if(L.tex)glDeleteTextures(1,&L.tex);logos_.clear();if(scrollerFontTex_)glDeleteTextures(1,&scrollerFontTex_);if(hdrFbo_)glDeleteFramebuffers(1,&hdrFbo_);if(hdrTex_)glDeleteTextures(1,&hdrTex_);if(depthRbo_)glDeleteRenderbuffers(1,&depthRbo_);if(postProgram_)glDeleteProgram(postProgram_);if(postVao_)glDeleteVertexArrays(1,&postVao_);if(postVbo_)glDeleteBuffers(1,&postVbo_);if(scrollerProgram_)glDeleteProgram(scrollerProgram_);if(scrollerVao_)glDeleteVertexArrays(1,&scrollerVao_);if(scrollerVbo_)glDeleteBuffers(1,&scrollerVbo_);if(bgProgram_)glDeleteProgram(bgProgram_);if(bgVao_)glDeleteVertexArrays(1,&bgVao_);if(bgVbo_)glDeleteBuffers(1,&bgVbo_);if(travelerProgram_)glDeleteProgram(travelerProgram_);if(travelerVao_)glDeleteVertexArrays(1,&travelerVao_);if(travelerVbo_)glDeleteBuffers(1,&travelerVbo_);if(travelerEbo_)glDeleteBuffers(1,&travelerEbo_);if(program_)glDeleteProgram(program_);if(ebo_)glDeleteBuffers(1,&ebo_);if(vbo_)glDeleteBuffers(1,&vbo_);if(vao_)glDeleteVertexArrays(1,&vao_);program_=postProgram_=scrollerProgram_=bgProgram_=travelerProgram_=vao_=postVao_=postVbo_=scrollerVao_=scrollerVbo_=bgVao_=bgVbo_=travelerVao_=vbo_=ebo_=travelerVbo_=travelerEbo_=scrollerFontTex_=hdrFbo_=hdrTex_=depthRbo_=0;}

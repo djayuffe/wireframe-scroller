@@ -4,7 +4,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 option(IW_BUILD_TESTS "Build geometry validation tests" ON)
-option(IW_WARNINGS_AS_ERRORS "Treat project warnings as errors" ON)
+# Off by default so a fresh toolchain (new Apple clang / MSVC) can't break a
+# user's first build over an unrelated new warning. CI sets this ON to keep the
+# strictness where the toolchain is controlled.
+option(IW_WARNINGS_AS_ERRORS "Treat project warnings as errors" OFF)
 function(iw_warnings target)
  if(MSVC)
   target_compile_options(${target} PRIVATE /W4 $<$<BOOL:${IW_WARNINGS_AS_ERRORS}>:/WX>)
@@ -18,6 +21,29 @@ iw_warnings(iw_geometry)
 find_package(OpenGL QUIET)
 find_package(glfw3 QUIET)
 find_package(PkgConfig QUIET)
+# Some environments' find_package(glfw3) sets glfw3_FOUND but doesn't create the
+# GLFW::GLFW3 imported target (e.g. a bare find_library-based setup). Fall back
+# to a hand-rolled imported target so the link carries the found library path.
+if(glfw3_FOUND AND NOT TARGET GLFW::GLFW3)
+ find_path(GLFW_INCLUDE_DIR GLFW/glfw3.h HINTS /opt/homebrew/include /opt/local/include /usr/local/include)
+ find_library(GLFW_LIBRARY NAMES glfw3 glfw HINTS /opt/homebrew/lib /opt/local/lib /usr/local/lib)
+ if(GLFW_INCLUDE_DIR AND GLFW_LIBRARY)
+  add_library(GlfwFallback UNKNOWN IMPORTED)
+  set_target_properties(GlfwFallback PROPERTIES IMPORTED_LOCATION "${GLFW_LIBRARY}" INTERFACE_INCLUDE_DIRECTORIES "${GLFW_INCLUDE_DIR}")
+ endif()
+endif()
+# Resolve the GLFW link target: prefer the imported target (correct path),
+# fall back to the bare name (linker default search) if no target was found.
+if(TARGET GLFW::GLFW3)
+ set(IW_GLFW_TARGET GLFW::GLFW3)
+elseif(TARGET GlfwFallback)
+ set(IW_GLFW_TARGET GlfwFallback)
+else()
+ set(IW_GLFW_TARGET glfw)
+endif()
+# SDL2: try CMake config, then pkg-config, then a raw find_path/find_library
+# (Homebrew/CLT ship SDL2 with no CMake config and no pkg-config on a fresh
+# Mac, so the raw fallback is what actually finds it in many cases).
 find_package(SDL2 CONFIG QUIET)
 if(TARGET SDL2::SDL2)
  set(IW_SDL_TARGET SDL2::SDL2)
@@ -25,6 +51,15 @@ elseif(PkgConfig_FOUND)
  pkg_check_modules(SDL2 QUIET IMPORTED_TARGET sdl2)
  if(TARGET PkgConfig::SDL2)
   set(IW_SDL_TARGET PkgConfig::SDL2)
+ endif()
+endif()
+if(NOT IW_SDL_TARGET)
+ find_path(SDL2_INCLUDE_DIR SDL.h HINTS /opt/homebrew/include /opt/local/include /usr/local/include)
+ find_library(SDL2_LIBRARY NAMES SDL2 HINTS /opt/homebrew/lib /opt/local/lib /usr/local/lib)
+ if(SDL2_INCLUDE_DIR AND SDL2_LIBRARY)
+  add_library(iw_sdl2 UNKNOWN IMPORTED)
+  set_target_properties(iw_sdl2 PROPERTIES IMPORTED_LOCATION "${SDL2_LIBRARY}" INTERFACE_INCLUDE_DIRECTORIES "${SDL2_INCLUDE_DIR}")
+  set(IW_SDL_TARGET iw_sdl2)
  endif()
 endif()
 if(PkgConfig_FOUND)
@@ -45,28 +80,43 @@ if(OpenGL_FOUND AND glfw3_FOUND)
  add_executable(impossible_wireframe src/main.cpp src/Renderer.cpp src/Audio.cpp src/TextScroller.cpp src/Image.cpp)
   target_include_directories(impossible_wireframe PRIVATE include thirdparty)
 target_include_directories(iw_geometry PUBLIC thirdparty)
-  # On macOS, find_package(OpenGL) resolves OpenGL::GL to a framework path under
-  # a specific SDK (e.g. /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/.../
-  # OpenGL.framework); when that SDK path is absent the linker fails with
-  # "No rule to make target '<sdk>/.../OpenGL.framework'". Link -framework OpenGL
-  # directly instead so it resolves at link time. On other platforms use
-  # OpenGL::GL (the plain libGL/GLU).
-  if(APPLE)
-   target_link_libraries(impossible_wireframe PRIVATE iw_geometry glfw "-framework OpenGL")
-  else()
-   target_link_libraries(impossible_wireframe PRIVATE iw_geometry glfw OpenGL::GL)
+   # Link GLFW via the imported target (carries the found library path, so a
+   # Homebrew install in /opt/homebrew/lib resolves correctly) — never the bare
+   # "glfw" string, which forces the linker to search default system paths.
+   # On macOS, find_package(OpenGL) resolves OpenGL::GL to a framework path
+   # under a specific SDK (e.g. .../MacOSX.sdk/.../OpenGL.framework); when that
+   # SDK path is absent the linker fails with "No rule to make target
+   # '<sdk>/.../OpenGL.framework'". Link -framework OpenGL directly so it
+   # resolves at link time, and add OPENGL_INCLUDE_DIR so <OpenGL/gl3.h> doesn't
+   # depend on toolchain-default SDK search. Other platforms use OpenGL::GL.
+   if(APPLE)
+    target_link_libraries(impossible_wireframe PRIVATE iw_geometry ${IW_GLFW_TARGET} "-framework OpenGL")
+    if(OPENGL_INCLUDE_DIR)
+     target_include_directories(impossible_wireframe PRIVATE "${OPENGL_INCLUDE_DIR}")
+    endif()
+   else()
+    target_link_libraries(impossible_wireframe PRIVATE iw_geometry ${IW_GLFW_TARGET} OpenGL::GL)
+   endif()
+  if(IW_SDL_TARGET AND IW_OPENMPT_TARGET)
+   target_link_libraries(impossible_wireframe PRIVATE ${IW_SDL_TARGET} ${IW_OPENMPT_TARGET})
+   target_compile_definitions(impossible_wireframe PRIVATE IW_HAS_AUDIO SDL_MAIN_HANDLED)
+  elseif(NOT IW_SDL_TARGET)
+   message(WARNING "SDL2 not found: renderer builds with BPM-only timing (macOS: brew install sdl2)")
+  elseif(NOT IW_OPENMPT_TARGET)
+   message(WARNING "libopenmpt not found: renderer builds with BPM-only timing (macOS: brew install libopenmpt)")
   endif()
- if(IW_SDL_TARGET AND IW_OPENMPT_TARGET)
-  target_link_libraries(impossible_wireframe PRIVATE ${IW_SDL_TARGET} ${IW_OPENMPT_TARGET})
-  target_compile_definitions(impossible_wireframe PRIVATE IW_HAS_AUDIO SDL_MAIN_HANDLED)
- else()
-  message(WARNING "SDL2/libopenmpt not found: renderer builds with BPM-only timing")
- endif()
  iw_warnings(impossible_wireframe)
  if(APPLE)
   target_compile_definitions(impossible_wireframe PRIVATE GL_SILENCE_DEPRECATION)
  endif()
- add_custom_command(TARGET impossible_wireframe POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/shaders $<TARGET_FILE_DIR:impossible_wireframe>/shaders)
+  if(NOT EXISTS ${CMAKE_SOURCE_DIR}/shaders/wire.vert)
+   message(FATAL_ERROR "shaders/ directory (wire.vert) missing; cannot build the renderer")
+  endif()
+  # Copy shaders next to the binary (the runtime resolves them there). rm -rf
+  # first so a shader deleted from the source doesn't linger in the build dir.
+  add_custom_command(TARGET impossible_wireframe POST_BUILD
+   COMMAND ${CMAKE_COMMAND} -E rm -rf $<TARGET_FILE_DIR:impossible_wireframe>/shaders
+   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/shaders $<TARGET_FILE_DIR:impossible_wireframe>/shaders)
 else()
  message(WARNING "OpenGL/glfw3 not found: renderer target disabled; geometry/tests remain buildable")
 endif()
@@ -74,6 +124,9 @@ if(IW_BUILD_TESTS)
  enable_testing()
  add_executable(geometry_tests tests/geometry_tests.cpp)
  target_link_libraries(geometry_tests PRIVATE iw_geometry)
+ # Point the logo test at the repo's logo pack so it runs (and fails loud) on
+ # every platform instead of silently skipping.
+ target_compile_definitions(geometry_tests PRIVATE IW_TEST_LOGO_PACK="${CMAKE_SOURCE_DIR}/UBER_Fullscreen_Logo_Pack")
  iw_warnings(geometry_tests)
  add_test(NAME geometry_tests COMMAND geometry_tests)
 endif()

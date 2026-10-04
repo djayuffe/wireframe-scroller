@@ -71,8 +71,14 @@ int main(){
    req(lit(' ')==0,"space glyph blank");}
   // Image: decode + discovery (uses the repo's UBER logo pack when present)
   { Image miss;req(!Image::loadFromFile("/nonexistent/xyz.jpg",miss),"load missing -> false");
-   auto logos=findLogos("/home/ulf/privat/wireframe-scroller/UBER_Fullscreen_Logo_Pack");
-   req(findLogos("/nonexistent/dir").empty(),"findLogos missing -> empty");
+    // Logo pack path: injected by CMake (IW_TEST_LOGO_PACK) so the test runs
+    // on every platform; falls back to the dev-machine path if unset.
+#ifdef IW_TEST_LOGO_PACK
+    auto logos=findLogos(IW_TEST_LOGO_PACK);
+#else
+    auto logos=findLogos("/home/ulf/privat/wireframe-scroller/UBER_Fullscreen_Logo_Pack");
+#endif
+    req(findLogos("/nonexistent/dir").empty(),"findLogos missing -> empty");
    if(!logos.empty()){
      req(logos.size()>=20,"logo pack has 20 cards");
      Image im;req(Image::loadFromFile(logos[0],im),"logo decodes");
