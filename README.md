@@ -48,6 +48,13 @@ macOS add `brew install sdl2 libopenmpt`. Linux: install a C++20 compiler,
 CMake, OpenGL development headers and GLFW3 development package, then use the
 same commands (or `make`).
 
+> **macOS build note** — if you hit
+> `No rule to make target '.../MacOSX.sdk/System/Library/Frameworks/OpenGL.framework'`,
+> your `build/` dir was configured against an SDK path that no longer exists
+> (stale CMakeCache). Delete it and reconfigure: `rm -rf build && cmake -S . -B build`.
+> The project also links `-framework OpenGL` directly on Apple (not the
+> `OpenGL::GL` SDK path) so a clean build never bakes in an SDK location.
+
 If OpenGL/GLFW are absent, CMake still builds `iw_geometry` and `geometry_tests`, allowing headless CI validation.
 
 ## Controls

@@ -45,7 +45,17 @@ if(OpenGL_FOUND AND glfw3_FOUND)
  add_executable(impossible_wireframe src/main.cpp src/Renderer.cpp src/Audio.cpp src/TextScroller.cpp src/Image.cpp)
   target_include_directories(impossible_wireframe PRIVATE include thirdparty)
 target_include_directories(iw_geometry PUBLIC thirdparty)
- target_link_libraries(impossible_wireframe PRIVATE iw_geometry glfw OpenGL::GL)
+  # On macOS, find_package(OpenGL) resolves OpenGL::GL to a framework path under
+  # a specific SDK (e.g. /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/.../
+  # OpenGL.framework); when that SDK path is absent the linker fails with
+  # "No rule to make target '<sdk>/.../OpenGL.framework'". Link -framework OpenGL
+  # directly instead so it resolves at link time. On other platforms use
+  # OpenGL::GL (the plain libGL/GLU).
+  if(APPLE)
+   target_link_libraries(impossible_wireframe PRIVATE iw_geometry glfw "-framework OpenGL")
+  else()
+   target_link_libraries(impossible_wireframe PRIVATE iw_geometry glfw OpenGL::GL)
+  endif()
  if(IW_SDL_TARGET AND IW_OPENMPT_TARGET)
   target_link_libraries(impossible_wireframe PRIVATE ${IW_SDL_TARGET} ${IW_OPENMPT_TARGET})
   target_compile_definitions(impossible_wireframe PRIVATE IW_HAS_AUDIO SDL_MAIN_HANDLED)
