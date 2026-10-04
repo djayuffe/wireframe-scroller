@@ -86,6 +86,7 @@ int main(int argc,char**argv){
     // Per-scene effect recipe (the lab's 24 curated recipes) with an optional
     // procedural "mutation" rotation. R toggles recipe mode, +/- cycle it.
     bool recipeMode=haveRecipe, prevF=false, prevP=false; int recipeChoice=haveRecipe?recipeArg:0; uint32_t baseSeed=0x50454646ull;
+    std::string lastRecipeName;  // recipe/effect name shown in the scroller
    while(!glfwWindowShouldClose(w)){
    double now=glfwGetTime();auto music=audio.state();double showSeconds=music.active?music.seconds:now;auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.level);int autoScene=int(sync.barIndex/2)%scenes.count();
    if(glfwGetKey(w,GLFW_KEY_T)==GLFW_PRESS){bool want=!scrollerOn;scrollerOn=want;}
@@ -110,6 +111,7 @@ int main(int argc,char**argv){
       ec.seed=baseSeed+uint32_t(scene)*131u;
       const Mesh3* secondary=m.v.empty()?nullptr:&scenes.mesh((scene+1)%scenes.count(),showSeconds,seed);
       EffectRecipe rc;
+      lastRecipeName="";  // reset; filled below
       if(recipeMode){ rc=recipe(recipeChoice); }
       else if(haveRecipe){ rc=recipe(recipeArg%recipeCount()); }
       else {
@@ -126,6 +128,7 @@ int main(int argc,char**argv){
         for(int k=0;k<mut.stageCount&&i<6;k++)rc.stages[i++]=mut.stages[k];
         rc.stageCount=i;
       }
+      lastRecipeName=std::string(rc.name);
       applyRecipe(m,rc,ec,secondary);
     }
     auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);if(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig){if(!r.upload(m)){std::fprintf(stderr,"Mesh rejected in scene %d: %s\n",scene,r.error().c_str());break;}lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;}int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=std::max(.1f,geo::stats(m).radius);float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;
@@ -138,17 +141,21 @@ int main(int argc,char**argv){
       // 3) Logo mode: composite the fullscreen logo into the capture + run the
       //    screen-space FX post pass over logo+wire+travelers.
       r.finishLogoFrame(float(showSeconds),W,H,scene,music.level);
-   // Fullscreen beat-synced text marquee: scene name + provenance.
-   if(scrollerOn){
-    auto&si=scenes.info(scene);
-    std::string label;
-    label.reserve(si.name.size()+1+si.provenance.size()+16);
-    label+=si.name;label+=' ';label+=si.provenance;
-    // Prefix with scene index for navigation clarity.
-    char idx[16];std::snprintf(idx,sizeof(idx),"[%02d] ",scene);
-    label.insert(0,idx);
-    r.drawScroller(float(showSeconds),sync.beatPhase,W,H,label.c_str(),music.level);
-   }
+    // Fullscreen beat-synced text marquee: scene name + provenance + effect
+    // recipe + BPM. Shown at the bottom of the screen as a news-ticker band.
+    if(scrollerOn){
+     auto&si=scenes.info(scene);
+     char bpmStr[16];std::snprintf(bpmStr,sizeof(bpmStr)," %dBPM",int(bpm+0.5));
+     std::string label;
+     label.reserve(si.name.size()+si.provenance.size()+lastRecipeName.size()+40);
+     // [NN] SceneName  —  provenance  ·  Effect: RecipeName  ·  132BPM
+     char idx[16];std::snprintf(idx,sizeof(idx),"[%02d]",scene);
+     label+=idx;label+=' ';label+=si.name;
+     label+="  -  ";label+=si.provenance;
+     if(!lastRecipeName.empty()){label+="  *  ";label+=lastRecipeName;}
+     label+=bpmStr;
+     r.drawScroller(float(showSeconds),sync.beatPhase,W,H,label.c_str(),music.level);
+    }
   glfwSwapBuffers(w);glfwPollEvents();if(glfwGetKey(w,GLFW_KEY_ESCAPE)==GLFW_PRESS)glfwSetWindowShouldClose(w,1);
  }
  r.shutdown();audio.close();

@@ -27,12 +27,14 @@ float fontPix(float g, float x, float y){
 
 void main(){
   vec2 px = uv * uResolution;
-  float scale = 4.0;                    // screen px per font px
-  float glyphW = 5.0 * scale;
-  float glyphH = 7.0 * scale;
-  float spacing = 1.0 * scale;
-  float cellW = glyphW + spacing;
-  float bandY0 = (uResolution.y - glyphH) * 0.5;
+  float scale = 6.0;                    // screen px per font px (larger, more readable)
+  float glyphW = 5.0 * scale;           // 30 px
+  float glyphH = 7.0 * scale;           // 42 px
+  float spacing = 1.0 * scale;          // 6 px
+  float cellW = glyphW + spacing;       // 36 px
+  // Bottom-anchored band (like a marquee/news ticker), 24 px above the bottom.
+  float margin = 24.0;
+  float bandY0 = uResolution.y - glyphH - margin;
   float y = px.y;
   float a = 0.0;
   if(y >= bandY0 && y < bandY0 + glyphH){
@@ -53,13 +55,23 @@ void main(){
       }
     }
   }
-  // Brightness: strong on the downbeat, boosted by music.
-  float pulse = 0.6 + 0.55 * (1.0 - uBeatPhase);
+  // Beat pulse: sharp flash on the downbeat (uBeatPhase=0), decays to a soft
+  // floor. musicLevel adds a sustained glow.
+  float beatFlash = pow(1.0 - clamp(uBeatPhase,0.0,1.0), 3.0);   // 1 at downbeat, ->0
   float music = clamp(uMusicLevel, 0.0, 1.0);
-  vec3 base = vec3(0.45, 0.9, 1.0);
-  vec3 hot  = vec3(1.0, 0.6, 0.95);
-  vec3 col = mix(base, hot, music * 0.6) * (0.9 + 0.5 * pulse + music * 0.5);
-  float edgeFade = smoothstep(0.0, 6.0, y - bandY0) * smoothstep(0.0, 6.0, (bandY0 + glyphH) - y);
-  float alpha = a * uOpacity * edgeFade;
+  float pulse = 0.55 + 0.85 * beatFlash + 0.45 * music;
+  // Color: cyan-white base, shifts to hot pink with music + a beat flash.
+  vec3 base = vec3(0.45, 0.90, 1.00);
+  vec3 hot  = vec3(1.00, 0.55, 0.95);
+  vec3 flash = vec3(1.00, 1.00, 1.10);
+  vec3 col = mix(base, hot, music * 0.55 + beatFlash * 0.25);
+  col = mix(col, flash, beatFlash * 0.5);
+  col *= pulse;
+  // Soft vertical fade at the band edges (8 px).
+  float edgeFade = smoothstep(0.0, 8.0, y - bandY0) * smoothstep(0.0, 8.0, (bandY0 + glyphH) - y);
+  // Subtle left/right screen-edge fade so text doesn't hard-clip at the borders.
+  float xFade = smoothstep(0.0, 40.0, px.x) * smoothstep(0.0, 40.0, uResolution.x - px.x);
+  float alpha = a * uOpacity * edgeFade * xFade;
+  // PREMULTIPLIED output (rgb *= alpha) — the C++ blend is (ONE, ONE_MINUS_SRC_ALPHA).
   FragColor = vec4(col * alpha, alpha);
 }

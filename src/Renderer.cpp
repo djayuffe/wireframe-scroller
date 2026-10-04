@@ -87,14 +87,17 @@ bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,flo
  Ry[0]=cy*scale*breath;Ry[2]=-sy*scale*breath;Ry[8]=sy*scale*breath;Ry[10]=cy*scale*breath;Ry[5]=scale*breath;
  Rx[5]=cx;Rx[6]=sx;Rx[9]=-sx;Rx[10]=cx;
   perspective(P,(52.f+3.f*std::sin(t*.07f)-2.f*ml)*3.14159265f/180.f,std::max(.05f,aspect),.05f,100.f);mul(R,Ry,Rx);mul(X,V,R);mul(M,P,X);
-   if(hasLogos_){
-    // Logo section: capture the wireframe ADDITIVELY over the fullscreen logo
-    // into the HDR FBO. The fullscreen logo + the post/FX pass are applied later
-    // by finishLogoFrame() (after the travelers) so the screen-space effects
-    // (lensing, shockwave, CA, SDF, glitch, ACES...) cover logo+wire+travelers.
+    if(hasLogos_){
+    // Logo section: the logo is the BACKDROP. Draw it FIRST into the HDR FBO
+    // (opaque, no depth), then the wireframe + travelers render ADDITIVELY on
+    // top, so the 3D content glows over the picture. The post/FX pass runs later
+    // (finishLogoFrame) over the combined buffer.
     glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);
     glViewport(0,0,width,height);
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+    // 1) Logo backdrop (full-screen, opaque, no depth).
+    drawBackground(t,width,height,sceneIndex,ml,true);
+    // 2) Wireframe additive over the logo.
     glEnable(GL_DEPTH_TEST);
     glUseProgram(program_);
     glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);
@@ -176,20 +179,19 @@ bool Renderer::drawBackground(float time,int width,int height,int sceneIndex,flo
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D,bgTexB_);
   if(uBgTexB_>=0)glUniform1i(uBgTexB_,1);
-  // In logo mode the logo is composited INTO the HDR capture (over the
-  // wireframe, normal alpha blend) so the post/FX pass sees it; otherwise it
-  // is drawn straight to the screen.
+  // In logo mode the logo is the BACKDROP: drawn first into the HDR capture
+  // (opaque, no blend) so the wireframe + travelers render additively on top.
+  // Otherwise it is drawn straight to the screen.
   if(logoComposite){
     glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);
-    glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
   } else {
     glBindFramebuffer(GL_FRAMEBUFFER,0);
   }
   glDisable(GL_DEPTH_TEST);
+  glDisable(GL_BLEND);
   glViewport(0,0,width,height);
   glBindVertexArray(bgVao_);
   glDrawArrays(GL_TRIANGLES,0,3);
-  if(logoComposite)glDisable(GL_BLEND);
   glActiveTexture(GL_TEXTURE0);
   return true;
 }
@@ -222,13 +224,12 @@ bool Renderer::drawTravelers(float time,int width,int height,float aspect,float 
   return true;
 }
 bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,float musicLevel){
+  (void)sceneIndex;  // logo backdrop was already drawn in draw()
   if(!logoCapturePending_)return false;
   logoCapturePending_=false;
-  // 1) Composite the fullscreen logo INTO the captured buffer (over the
-  //    wireframe + travelers, normal alpha blend) so the post/FX pass sees it.
-  drawBackground(time,width,height,sceneIndex,musicLevel,true);
-  // 2) Run the post/FX pass (lensing, shockwave, CA, SDF, glitch, scanlines,
-  //    ACES...) over the combined frame to the default framebuffer.
+  // The logo backdrop was already drawn FIRST in draw() (into the HDR buffer),
+  // and the wireframe + travelers rendered additively on top of it. The buffer
+  // now holds logo+wire+travelers. Just run the post/FX pass over it.
   glBindFramebuffer(GL_FRAMEBUFFER,0);
   glDisable(GL_DEPTH_TEST);
   glViewport(0,0,width,height);
@@ -246,7 +247,7 @@ bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,fl
 bool Renderer::drawScroller(float time,float beatPhase,int width,int height,const char*text,float musicLevel){
   if(!scrollerProgram_||!text||!text[0])return false;
   // Measure text in font pixels (scale=4, spacing=1).
-  float scale=4.0f;
+  float scale=6.0f;  // must match scroller.frag
   float textWidth=(float)textfont::measure(text,1)*scale;
   float offset=scrollOffset(time,beatPhase,(float)width,(int)textWidth,musicLevel);
   glUseProgram(scrollerProgram_);
@@ -260,13 +261,15 @@ bool Renderer::drawScroller(float time,float beatPhase,int width,int height,cons
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D,scrollerFontTex_);
   if(uScFont_>=0)glUniform1i(uScFont_,1);
-  glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+  // The scroller shader outputs PREMULTIPLIED rgb (col*alpha, alpha), so the
+  // blend must be (ONE, ONE_MINUS_SRC_ALPHA) — using SRC_ALPHA would dim the
+  // text by alpha a second time.
+  glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
   glDisable(GL_DEPTH_TEST);
   glViewport(0,0,width,height);
   glBindVertexArray(scrollerVao_);
   glDrawArrays(GL_TRIANGLES,0,3);
   glDisable(GL_BLEND);
-  glActiveTexture(GL_TEXTURE0);
   glActiveTexture(GL_TEXTURE0);
   return true;
 }

@@ -65,10 +65,11 @@ If OpenGL/GLFW are absent, CMake still builds `iw_geometry` and `geometry_tests`
 ## Visual layers
 The renderer composites four layers, back to front:
 1. **Logo backdrop** — the 20 `UBER_Fullscreen_Logo_Pack/UBER_*_1920x1080.jpg`
-   cards as a full-screen texture. It crossfades as the scene changes and has a
-   subtle Ken Burns zoom + beat-reactive brightness. Cards are found
-   automatically relative to the executable (or CWD), so the folder just needs
-   to sit next to the binary.
+   cards as a full-screen texture, drawn FIRST (as the opaque background) into
+   the HDR buffer so the wireframe + travelers glow additively on top. It
+   crossfades as the scene changes and has a subtle Ken Burns zoom +
+   beat-reactive brightness. Cards are found automatically relative to the
+   executable (or CWD), so the folder just needs to sit next to the binary.
 2. **Wireframe** — the 51 scenes with beat-reactive breathing scale, camera
    drift and morphing.
 3. **Traveling objects** — 12 small octahedra weaving back and forth through
@@ -90,8 +91,12 @@ The renderer composites four layers, back to front:
    breathing, an SDF nested-triangle energy sculpture, holographic spectral
    interference, beat-gated glitch slices, scanlines, film grain, and an ACES
    filmic tone map — all reactive to the beat/music level.
-6. **Text scroller** — the beat-synced marquee of the active scene's name +
-   provenance (on by default; toggle with T).
+ 6. **Text scroller** — a beat-synced news-ticker band at the bottom of the
+    screen (6x font, larger and more readable than before). It scrolls
+    leftward and flashes on each downbeat. The line shows the scene index,
+    name, provenance, the active effect-recipe name, and the BPM, e.g.
+    `[03] Tesseract - 4D hypercube  *  Singularity Bloom  132BPM`. On by
+    default; toggle with T.
 
 All layers are best-effort: if a shader fails to compile or the logo pack is
 missing, the app degrades (no background / no travelers / no FX) rather than

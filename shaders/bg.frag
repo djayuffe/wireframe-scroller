@@ -27,5 +27,8 @@ void main(){
   vec3 col=mix(texture(uTexA,ua).rgb,texture(uTexB,ub).rgb,clamp(uMix,0.0,1.0));
   // gentle brightness breathing with the beat.
   col*=0.92+0.08*clamp(uMusicLevel,0.0,1.0)+0.02*sin(uTime*0.5);
-  FragColor=vec4(col*uOpacity,uOpacity);
+  // Straight (non-premultiplied) RGB; the blend (SRC_ALPHA/ONE_MINUS_SRC_ALPHA)
+  // applies the opacity. In logo mode the logo is drawn opaque (no blend) as
+  // the backdrop, so uOpacity=1.0 here is correct.
+  FragColor=vec4(col,uOpacity);
 }
