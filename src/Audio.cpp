@@ -103,7 +103,7 @@ void AudioPlayer::render(float* out, int frames) {
   // which would freeze the visual at the last frame. Detect that and rewind to
   // 0 so the music (and the beat-synced visuals) keep going.
   if (got == 0) {
-    openmpt_module_seek_to_seconds(module_, 0.0);
+    openmpt_module_set_position_seconds(module_, 0.0);
     got = openmpt_module_read_interleaved_float_stereo(
         module_, rate_, static_cast<size_t>(frames), out);
   }
