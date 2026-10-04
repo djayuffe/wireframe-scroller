@@ -29,6 +29,11 @@ public:
     // programs, VAOs, buffers, textures, and the HDR FBO. Logo textures are
     // re-loaded by the caller (loadLogos) since they need the image data.
     bool reinit(const std::string& shaderDir);
+    // Save the current default-framebuffer contents (the finished frame, after
+    // the post pass + scroller) as an 8-bit PNG via glReadPixels + stb_image_write.
+    // Used for headless/automated visual verification. Returns false (with
+    // error_ set) on GL or write failure.
+    bool screenshot(const std::string& path,int width,int height);
     void shutdown();
    const std::string& error() const { return error_; }
  private:

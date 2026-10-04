@@ -14,9 +14,12 @@
 #endif
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <vector>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 namespace {std::string readText(const std::string&p){std::ifstream f(p);if(!f)return {};std::ostringstream s;s<<f.rdbuf();return s.str();}
 bool shader(GLuint&out,GLenum type,const std::string&s,std::string&err){out=glCreateShader(type);const char*p=s.c_str();glShaderSource(out,1,&p,nullptr);glCompileShader(out);GLint ok=0;glGetShaderiv(out,GL_COMPILE_STATUS,&ok);if(!ok){GLint n=0;glGetShaderiv(out,GL_INFO_LOG_LENGTH,&n);std::string log(std::max(1,n),'\0');glGetShaderInfoLog(out,n,nullptr,log.data());err=log;glDeleteShader(out);out=0;return false;}return true;}
 GLuint linkProgram(const std::string&vs,const std::string&fs,std::string&err){GLuint v=0,f=0;if(!shader(v,GL_VERTEX_SHADER,vs,err)||!shader(f,GL_FRAGMENT_SHADER,fs,err)){if(v)glDeleteShader(v);if(f)glDeleteShader(f);return 0;}GLuint p=glCreateProgram();glAttachShader(p,v);glAttachShader(p,f);glLinkProgram(p);glDeleteShader(v);glDeleteShader(f);GLint ok=0;glGetProgramiv(p,GL_LINK_STATUS,&ok);if(!ok){GLint n=0;glGetProgramiv(p,GL_INFO_LOG_LENGTH,&n);err.resize(std::max(1,n));glGetProgramInfoLog(p,n,nullptr,err.data());glDeleteProgram(p);return 0;}return p;}
@@ -299,8 +302,32 @@ bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,fl
   glBindVertexArray(postVao_);
   glDrawArrays(GL_TRIANGLES,0,3);
   return true;
-}
-bool Renderer::drawScroller(float time,float beatPhase,int width,int height,const char*text,float musicLevel){
+ }
+ bool Renderer::screenshot(const std::string& path,int width,int height){
+   width=std::max(1,width);height=std::max(1,height);
+   std::vector<unsigned char> px((size_t)width*height*3);
+   // Read from the default framebuffer (the finished frame: post pass + scroller
+   // are already there). glReadPixels returns bottom-up, so we flip vertically
+   // while writing the RGB rows for stb.
+   glBindFramebuffer(GL_FRAMEBUFFER,0);
+   glPixelStorei(GL_PACK_ALIGNMENT,1);
+   glReadBuffer(GL_BACK);  // void in core GL; ensures we read the back buffer
+   glReadPixels(0,0,width,height,GL_RGB,GL_UNSIGNED_BYTE,px.data());
+   if(glGetError()!=GL_NONE){
+     error_="glReadPixels failed";return false;
+   }
+   std::vector<unsigned char> out((size_t)width*height*3);
+   for(int y=0;y<height;y++){
+     const unsigned char* src=&px[(size_t)(height-1-y)*width*3];
+     unsigned char* dst=&out[(size_t)y*width*3];
+     std::memcpy(dst,src,(size_t)width*3);
+   }
+   if(!stbi_write_png(path.c_str(),width,height,3,out.data(),width*3)){
+     error_="stbi_write_png failed: "+path;return false;
+   }
+   return true;
+ }
+ bool Renderer::drawScroller(float time,float beatPhase,int width,int height,const char*text,float musicLevel){
   if(!scrollerProgram_||!text||!text[0])return false;
   // Measure text in font pixels (scale=4, spacing=1).
   float scale=6.0f;  // must match scroller.frag

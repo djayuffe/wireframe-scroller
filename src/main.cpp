@@ -50,6 +50,7 @@ static std::vector<std::filesystem::path> logoCandidates(const std::filesystem::
 int main(int argc,char**argv){
   double bpm=132.0;std::filesystem::path musicPath,logoOverride;bool noScroller=false;
   bool haveRecipe=false; int recipeArg=0;  // haveRecipe=false -> auto mode
+  std::string screenshotPath; int maxFrames=0;  // --screenshot PATH / --frames N
   for(int i=1;i<argc;i++){
     std::string arg(argv[i]);
     if(arg=="--bpm"&&i+1<argc)bpm=std::max(1.0,std::atof(argv[++i]));
@@ -58,6 +59,8 @@ int main(int argc,char**argv){
     else if(arg=="--logos"&&i+1<argc)logoOverride=argv[++i];
     else if(arg=="--recipe"&&i+1<argc){recipeArg=std::atoi(argv[++i]);haveRecipe=true;}
     else if(arg=="--version"){std::fprintf(stdout,"Impossible Wireframe v4.25\n");return 0;}
+    else if(arg=="--screenshot"&&i+1<argc){screenshotPath=argv[++i];}
+    else if(arg=="--frames"&&i+1<argc){maxFrames=std::max(0,std::atoi(argv[++i]));}
     else if(arg=="--help"||arg=="-h"){
       std::fprintf(stdout,
         "Impossible Wireframe v4.25\n"
@@ -67,6 +70,10 @@ int main(int argc,char**argv){
         "  --no-scroller   Start with the text marquee off (toggle with T)\n"
         "  --logos DIR     Directory of UBER_*_1920x1080.jpg logo cards\n"
         "  --recipe N      Start in recipe mode with curated recipe N (0-23)\n"
+        "  --screenshot P  Save one PNG frame to P (then continue running)\n"
+        "  --frames N      Exit after N frames (0 = run forever; for automated\n"
+        "                  verification, e.g. --frames 30 --screenshot out.png)\n"
+        "  --version       Print version and exit\n"
         "  -h, --help      Show this help\n"
         "Keys: Left/Right cycle scenes, Space back to auto, R recipe mode,\n"
         "      Up/Down cycle recipe, P re-roll mutation, T toggle scroller, Esc quit\n");
@@ -232,10 +239,23 @@ int main(int argc,char**argv){
      label+="  -  ";label+=si.provenance;
      if(!lastRecipeName.empty()){label+="  *  ";label+=lastRecipeName;}
      label+=bpmStr;
-     r.drawScroller(float(showSeconds),sync.beatPhase,W,H,label.c_str(),music.level);
+      r.drawScroller(float(showSeconds),sync.beatPhase,W,H,label.c_str(),music.level);
+     }
+    // --screenshot: capture the finished frame (post pass + scroller already in
+    // the default framebuffer) to a PNG. Done after drawScroller so the marquee
+    // is included. The capture is one-shot; after it the app keeps running
+    // unless --frames also terminates it.
+    static bool shotTaken=false;
+    if(!screenshotPath.empty()&&!shotTaken&&W>0&&H>0){
+      if(r.screenshot(screenshotPath,W,H)){std::fprintf(stdout,"screenshot: %s (%dx%d)\n",screenshotPath.c_str(),W,H);shotTaken=true;}
+      else std::fprintf(stderr,"screenshot failed: %s\n",r.error().c_str());
     }
-  glfwSwapBuffers(w);glfwPollEvents();if(glfwGetKey(w,GLFW_KEY_ESCAPE)==GLFW_PRESS)glfwSetWindowShouldClose(w,1);
- }
+    // --frames N: exit after N rendered frames (for automated verification).
+    // Counts frames actually rendered (not skipped-by-iconify ones).
+    static int frameCount=0;
+    if(maxFrames>0){ if(++frameCount>=maxFrames){std::fprintf(stdout,"--frames %d reached; exiting\n",maxFrames);break;} }
+   glfwSwapBuffers(w);glfwPollEvents();if(glfwGetKey(w,GLFW_KEY_ESCAPE)==GLFW_PRESS)glfwSetWindowShouldClose(w,1);
+  }
  r.shutdown();audio.close();
 #if defined(IW_HAS_AUDIO)
  SDL_QuitSubSystem(SDL_INIT_AUDIO);
