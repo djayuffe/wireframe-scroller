@@ -55,7 +55,22 @@ int main(){
     // over time the offset must advance (hit a non-zero value at some t)
     bool advanced=false;
     for(double t=0;t<60;t+=0.01){if(scrollOffset(t,0.f,100.f,50.f)>0.f){advanced=true;break;}}
-    req(advanced,"scroll advances over time");}
+    req(advanced,"scroll advances over time");
+    // Long-session stability: even after hours the offset must stay in [0,wrap)
+    // with no float-jitter (the old (float)seconds lost sub-pixel precision
+    // after ~minutes). Fixed beatPhase so only `seconds` varies.
+    float wrapL=100.f+50.f;
+    for(double t:{3600.0,7200.0,86400.0,360000.0,3600000.0,36000000.0}){
+      float o=scrollOffset(t,0.f,100.f,50.f);
+      req(o>=0.f&&o<wrapL,"scroll in [0,wrap) at long t");
+      // Consecutive samples at a long base must advance monotonically and
+      // smoothly (no back-step jitter from precision loss).
+      float o2=scrollOffset(t+0.001f,0.f,100.f,50.f);
+      // o2 is o + ~0.09px, wrapping into [0,wrap) — either it advanced or it
+      // wrapped (o2 < o). It must NOT jump by more than the step + epsilon.
+      float step=o2-o; if(step<0)step+=wrapL;
+      req(step<1.f,"scroll smooth at long t (no jitter)");
+    }}
   // Scroller font decode: the EXACT bit math the GLSL shader uses must match
   // the raw glyph bits for every (glyph, x, y) - a regression guard so the
   // marquee can't silently render blank again.

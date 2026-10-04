@@ -119,13 +119,16 @@ std::vector<uint8_t> pack() {
 }
 }
 float scrollOffset(double seconds, float beatPhase, float windowWidthPx,
-                   int textWidthPx, float musicLevel) {
+                    int textWidthPx, float musicLevel) {
   // Base speed: ~90 px/s, eased by beat (fastest on the downbeat) and music.
   float speed = 90.f * (0.7f + 0.3f * (1.f - beatPhase)) + musicLevel * 40.f;
-  // Total distance for one full wrap: window width + text width.
-  float wrap = windowWidthPx + (float)textWidthPx;
-  float dist = (float)seconds * speed;
+  // Use double for the long-running distance/wrap: (float)seconds loses
+  // sub-pixel precision after a few minutes, causing scroll jitter. Double
+  // keeps the in-cycle remainder stable for hours.
+  double wrap = (double)windowWidthPx + (double)textWidthPx;
+  if (wrap <= 0.0) return 0.f;
+  double dist = seconds * (double)speed;
   // In-cycle remainder [0, wrap): the text scrolls left continuously,
   // and re-enters from the right once per wrap.
-  return fmodf(dist, wrap);
+  return (float)std::fmod(dist, wrap);
 }

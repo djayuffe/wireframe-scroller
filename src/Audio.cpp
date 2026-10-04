@@ -97,8 +97,16 @@ void AudioPlayer::render(float* out, int frames) {
     std::fill(out, out + frames * 2, 0.0f);
     return;
   }
-  const size_t got = openmpt_module_read_interleaved_float_stereo(
+  size_t got = openmpt_module_read_interleaved_float_stereo(
       module_, rate_, static_cast<size_t>(frames), out);
+  // Loop the track: when the module ends it keeps returning 0 frames forever,
+  // which would freeze the visual at the last frame. Detect that and rewind to
+  // 0 so the music (and the beat-synced visuals) keep going.
+  if (got == 0) {
+    openmpt_module_seek_to_seconds(module_, 0.0);
+    got = openmpt_module_read_interleaved_float_stereo(
+        module_, rate_, static_cast<size_t>(frames), out);
+  }
   if (got < static_cast<size_t>(frames)) {
     std::fill(out + got * 2, out + frames * 2, 0.0f);
   }
@@ -107,17 +115,21 @@ void AudioPlayer::render(float* out, int frames) {
   // Zero-phase-ish 3-band split via simple one-pole IIR (stable, no aliasing
   // guard needed for audio-rate signals). Bass <350 Hz, mid 350-3000, treble
   // >3000. Coefficients precomputed for 48 kHz (close enough for 44.1 too).
+  // Metrics are computed over the VALID samples only (got*2) — not the
+  // zero-filled tail — so the silence at the wrap point doesn't drag the RMS
+  // and band levels down.
   const float aB=.021f, aM=.14f, aT=.5f;  // 1-pole lowpass alphas
   // lpB_/lpM_/lpT_ are persistent member state (not per-call locals) so the
   // one-pole filters stay warm across the ~37 render() calls/second.
-  for (int i = 0; i < frames * 2; ++i) {
+  const int valid = static_cast<int>(got * 2);
+  for (int i = 0; i < valid; ++i) {
     float s=out[i];
     sum += double(s) * double(s);
     lpB_ += aB*(s-lpB_); lpM_ += aM*(s-lpM_); lpT_ += aT*(s-lpT_);
     float lo=lpB_, band=lpM_-lpB_, hi=lpT_-lpM_;
     bSum+=std::fabs(lo); mSum+=std::fabs(band); tSum+=std::fabs(hi);
   }
-  const int N=std::max(1,frames*2);
+  const int N=std::max(1,valid);
   const float rms = static_cast<float>(std::sqrt(sum / N));
   level_.store(std::clamp(rms * 4.0f, 0.0f, 1.0f));
   bass_.store(std::clamp(bSum/float(N)*6.0f,0.f,1.f));

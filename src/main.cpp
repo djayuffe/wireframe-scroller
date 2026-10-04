@@ -90,7 +90,15 @@ int main(int argc,char**argv){
    while(!glfwWindowShouldClose(w)){
    double now=glfwGetTime();auto music=audio.state();double showSeconds=music.active?music.seconds:now;auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.level);int autoScene=int(sync.barIndex/2)%scenes.count();
    if(glfwGetKey(w,GLFW_KEY_T)==GLFW_PRESS){bool want=!scrollerOn;scrollerOn=want;}
-  bool L=glfwGetKey(w,GLFW_KEY_LEFT)==GLFW_PRESS,R=glfwGetKey(w,GLFW_KEY_RIGHT)==GLFW_PRESS;if(L&&!prevL)manual=(manual<0?autoScene:manual)-1;if(R&&!prevR)manual=(manual<0?autoScene:manual)+1;prevL=L;prevR=R;if(manual>=0){manual=(manual%scenes.count()+scenes.count())%scenes.count();}if(glfwGetKey(w,GLFW_KEY_SPACE)==GLFW_PRESS)manual=-1;
+   bool L=glfwGetKey(w,GLFW_KEY_LEFT)==GLFW_PRESS,R=glfwGetKey(w,GLFW_KEY_RIGHT)==GLFW_PRESS;
+   // Normalize the current scene (auto -> autoScene) before applying the
+   // delta so LEFT on scene 0 wraps to the last scene (and RIGHT on the last
+   // wraps to 0) instead of leaving manual at -1.
+   int curScene=manual<0?autoScene:((manual%scenes.count()+scenes.count())%scenes.count());
+   if(L&&!prevL)manual=(curScene-1+scenes.count())%scenes.count();
+   if(R&&!prevR)manual=(curScene+1)%scenes.count();
+   prevL=L;prevR=R;
+   if(glfwGetKey(w,GLFW_KEY_SPACE)==GLFW_PRESS)manual=-1;
   int scene=manual<0?autoScene:manual;Mesh3 m=scenes.mesh(scene,showSeconds,seed);if(scene!=lastScene){auto&si=scenes.info(scene);std::fprintf(stdout,"scene %02d: %.*s [%.*s]\n",scene,int(si.name.size()),si.name.data(),int(si.provenance.size()),si.provenance.data());lastScene=scene;}
     // Toggle effect-recipe mode (R). Auto: per-scene curated recipe (rotated
     // by scene index) + a deterministic mutation overlay. Recipe: hold a fixed
@@ -109,7 +117,6 @@ int main(int argc,char**argv){
       if(music.active){ ec.bass=music.bass; ec.mid=music.mid; ec.treble=music.treble; }
       else { ec.bass=.5f+.5f*std::sin(float(showSeconds)*2.0f); ec.mid=.5f+.5f*std::sin(float(showSeconds)*3.3f+1.1f); ec.treble=.5f+.5f*std::sin(float(showSeconds)*5.7f+2.3f); }
       ec.seed=baseSeed+uint32_t(scene)*131u;
-      const Mesh3* secondary=m.v.empty()?nullptr:&scenes.mesh((scene+1)%scenes.count(),showSeconds,seed);
       EffectRecipe rc;
       lastRecipeName="";  // reset; filled below
       if(recipeMode){ rc=recipe(recipeChoice); }
@@ -129,6 +136,12 @@ int main(int argc,char**argv){
         rc.stageCount=i;
       }
       lastRecipeName=std::string(rc.name);
+      // The secondary mesh (scene+1) is only used by bridge effects
+      // (Nearest Bridge / Morph). Compute it only when the recipe actually
+      // references it — otherwise a per-frame 600-cell projection is wasted.
+      const Mesh3* secondary=nullptr;
+      for(int k=0;k<rc.stageCount;k++)
+        if(rc.stages[k].useSecondary){ secondary=m.v.empty()?nullptr:&scenes.mesh((scene+1)%scenes.count(),showSeconds,seed); break; }
       applyRecipe(m,rc,ec,secondary);
     }
     auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);if(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig){if(!r.upload(m)){std::fprintf(stderr,"Mesh rejected in scene %d: %s\n",scene,r.error().c_str());break;}lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;}int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=std::max(.1f,geo::stats(m).radius);float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;
