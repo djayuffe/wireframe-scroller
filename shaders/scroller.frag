@@ -8,15 +8,18 @@ uniform float uMusicLevel;
 uniform float uScrollOffset;
 uniform float uTextWidth;
 uniform float uOpacity;
-// 95 glyphs (ASCII 32..126), 5x7 each, packed row-major into a 665-byte
-// GL_R8 1D texture. Each byte = one row, MSB = leftmost pixel.
-uniform sampler1D uFont;
+// 95 glyphs (ASCII 32..126), 5x7 each, packed row-major into a 665-pixel
+// texture (a 1x665 GL_R8 GL_TEXTURE_2D — Apple's Metal-based OpenGL driver
+// does not support 1D textures, so a 1-row 2D texture is used instead).
+// Each pixel = one row, MSB = leftmost column.
+uniform sampler2D uFont;
 
 // Sample one pixel of glyph g at (x 0..4, y 0..6).
 float fontPix(float g, float x, float y){
   float idx = g*7.0 + y;
   float bit = 4.0 - x;                 // MSB = leftmost column
-  float v = texture(uFont, (idx + 0.5)/665.0).r;
+  // 1x665 texture: u = (idx+0.5)/665, v = 0.5 (the single row).
+  float v = texture(uFont, vec2((idx + 0.5)/665.0, 0.5)).r;
   // Extract bit `bit` of byte v: (v >> bit) & 1  ==  floor(v/2^bit) mod 2.
   return fmod(floor(v / pow(2.0, bit)), 2.0);
 }
