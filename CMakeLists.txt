@@ -174,9 +174,20 @@ if(OpenGL_FOUND AND glfw3_FOUND)
    target_include_directories(impossible_wireframe PRIVATE "${IW_OPENGL_INCLUDE_DIR}")
   endif()
   target_compile_definitions(impossible_wireframe PRIVATE GL_SILENCE_DEPRECATION)
- else()
-  target_link_libraries(impossible_wireframe PRIVATE iw_geometry ${IW_GLFW_TARGET} OpenGL::GL)
- endif()
+  elseif(WIN32)
+   # Windows: OpenGL::GL links opengl32 (shipped in System32). GLFW on Windows
+   # is opengl32-independent (it loads the ICD at runtime). No extra include
+   # dir needed — <GL/gl.h> comes from the SDK. If the OpenGL target is absent
+   # (rare, e.g. a stripped SDK), warn so the link failure isn't a mystery.
+   if(TARGET OpenGL::GL)
+    target_link_libraries(impossible_wireframe PRIVATE iw_geometry ${IW_GLFW_TARGET} OpenGL::GL)
+   else()
+    target_link_libraries(impossible_wireframe PRIVATE iw_geometry ${IW_GLFW_TARGET} opengl32)
+    message(WARNING "OpenGL::GL target not found on Windows; falling back to the raw 'opengl32' link name.")
+   endif()
+  else()
+   target_link_libraries(impossible_wireframe PRIVATE iw_geometry ${IW_GLFW_TARGET} OpenGL::GL)
+  endif()
 
  if(IW_SDL_TARGET AND IW_OPENMPT_TARGET)
   target_link_libraries(impossible_wireframe PRIVATE ${IW_SDL_TARGET} ${IW_OPENMPT_TARGET})

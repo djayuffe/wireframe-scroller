@@ -46,18 +46,29 @@ all: build
 
 stamp:
 	@mkdir -p $(BUILD_DIR)
-	@# Reconfigure if the build dir is missing, the generator changed, or the
-	@# CMakeLists/Makefile/build-type stamp is older than the sources.
-	@if [ ! -d $(BUILD_DIR) ] || \
+	@# Reconfigure if the build dir is missing, the generator changed, the
+	@# CMakeLists/Makefile/build-type stamp is older than the sources, OR the
+	@# cached CMAKE_BUILD_TYPE differs from the requested TYPE. The last check
+	@# is the one mtime alone can't catch: `make` then `make TYPE=Debug` would
+	@# otherwise silently reuse the stale Release cache (the stamp is not older
+	@# than CMakeLists.txt, so no reconfigure fires). We compare the *value*
+	@# actually in CMakeCache.txt against the requested type.
+	@cached=; if [ -f $(BUILD_DIR)/CMakeCache.txt ]; then \
+	  cached=$$(grep -E '^CMAKE_BUILD_TYPE:' $(BUILD_DIR)/CMakeCache.txt 2>/dev/null | head -1 | cut -d= -f2); fi; \
+	if [ ! -d $(BUILD_DIR) ] || \
 	    [ ! -f $(BUILD_DIR)/CMakeCache.txt ] || \
 	    [ ! -f $(STAMP) ] || \
+	    [ "$(cached)" != "$(TYPE)" ] || \
 	    [ $(STAMP) -ot CMakeLists.txt ] || \
 	    [ $(STAMP) -ot Makefile ]; then \
+	  if [ -n "$(cached)" ] && [ "$(cached)" != "$(TYPE)" ]; then \
+	    echo "build type changed $(cached) -> $(TYPE), reconfiguring"; \
+	  fi; \
 	  rm -rf $(BUILD_DIR); \
 	  $(CMAKE) -S . -B $(BUILD_DIR) $(CMAKE_FLAGS); \
 	  date > $(STAMP); \
 	else \
-	  echo "build/ up to date — reusing existing cache"; \
+	  echo "build/ up to date — reusing existing cache ($(TYPE))"; \
 	fi
 
 configure:

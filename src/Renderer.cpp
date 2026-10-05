@@ -217,6 +217,14 @@ bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,flo
 bool Renderer::loadLogos(const std::string&dir){
   auto files=findLogos(dir);
   if(files.empty())return false;
+  // Idempotent: clear any pre-existing entries first. On a reinit (after a
+  // context loss) the old logo GL textures are already deleted by reinit() and
+  // their .tex set to 0 — but the vector would otherwise still hold those stale
+  // zero-tex entries, and a second loadLogos would APPEND to them, doubling the
+  // cycle length and leaving ~half the cards blank (tex==0 -> texture 0).
+  for(auto&L:logos_)if(L.tex)glDeleteTextures(1,&L.tex);
+  logos_.clear();
+  bgTexA_=bgTexB_=0;bgCurrent_=bgTarget_=-1;bgMix_=0.f;
   for(auto& f:files){
     Image img;
     if(!Image::loadFromFile(f,img)) continue;
@@ -328,13 +336,18 @@ bool Renderer::drawTravelers(float time,int width,int height,float aspect,float 
    if(uTrTime_>=0)glUniform1f(uTrTime_,time);
    if(uTrSpeed_>=0)glUniform1f(uTrSpeed_,0.85f);
    if(uTrColor_>=0)glUniform3f(uTrColor_,1.0f,0.9f,1.2f);
-  glLineWidth(1.4f+std::clamp(musicLevel,0.f,1.f)*1.0f);
-  if(hasLogos_){glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);glBlendEquation(GL_FUNC_ADD);}
-  glBindVertexArray(travelerVao_);
-  glDrawElements(GL_LINES,(GLsizei)travelerEdgeCount_,GL_UNSIGNED_INT,nullptr);
-  if(hasLogos_)glDisable(GL_BLEND);
-  return true;
-}
+   glLineWidth(1.4f+std::clamp(musicLevel,0.f,1.f)*1.0f);
+   // The travelers are captured into the HDR (float) buffer in BOTH logo and
+   // no-logo mode, so they must always render ADDITIVELY (ONE,ONE) to glow over
+   // the wireframe — regardless of hasLogos_. (The old code only enabled blend
+   // in logo mode, so in no-logo mode the travelers inherited whatever blend
+   // state leaked in and often rendered opaque-replace, clobbering the mesh.)
+   glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);glBlendEquation(GL_FUNC_ADD);
+   glBindVertexArray(travelerVao_);
+   glDrawElements(GL_LINES,(GLsizei)travelerEdgeCount_,GL_UNSIGNED_INT,nullptr);
+   glDisable(GL_BLEND);
+   return true;
+ }
 bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,float musicLevel,float bpm){
   (void)sceneIndex;
   if(!logoCapturePending_)return false;

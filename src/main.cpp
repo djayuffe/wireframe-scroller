@@ -3,6 +3,8 @@
 #ifdef __APPLE__
 #include <OpenGL/gl3.h>
 #include <mach-o/dyld.h>   // _NSGetExecutablePath
+#elif defined(_WIN32)
+#include <windows.h>        // GetModuleFileNameA
 #else
 #ifndef GL_GLEXT_PROTOTYPES
 #define GL_GLEXT_PROTOTYPES 1
@@ -115,9 +117,12 @@ int main(int argc,char**argv){
       #if defined(__APPLE__)
       { char buf[4096]; uint32_t sz=sizeof(buf);
         if(_NSGetExecutablePath(buf,&sz)==0){ std::error_code ec; exe=std::filesystem::canonical(buf,ec); } }
-     #elif defined(__linux__)
-     { std::error_code ec; exe=std::filesystem::canonical("/proc/self/exe",ec); }
-     #endif
+      #elif defined(__linux__)
+      { std::error_code ec; exe=std::filesystem::canonical("/proc/self/exe",ec); }
+      #elif defined(_WIN32)
+      { char buf[4096]; DWORD n=GetModuleFileNameA(nullptr,buf,sizeof buf);
+        if(n>0&&n<sizeof buf){ std::error_code ec; exe=std::filesystem::canonical(buf,ec); } }
+      #endif
     if(!exe.empty()&&exe.has_parent_path()){
      exeDir=exe.parent_path();
      auto cand=exeDir/"shaders";

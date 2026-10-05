@@ -56,9 +56,13 @@ void main(){
       if(gx >= 0.0 && gx < 5.0 && gy >= 0.0 && gy < 7.0){
         int ci = int(floor(fi));
         if(ci >= 0 && ci < uCount){
-          // Sample the code strip for this character's ASCII code.
+          // Sample the code strip for this character's ASCII code. GL_R8
+          // normalizes the stored byte to [0,1] (b -> b/255), so the read-back
+          // float must be SCALED BACK to 0..255 and rounded to recover the byte.
+          // (The old `int(r + 0.5)` collapsed every printable char — all < 0.5 —
+          // to code 0 -> glyph -32 -> blank marquee.)
           float u = (float(ci) + 0.5) / float(uCount);
-          int code = int(texture(uCodes, vec2(u, 0.5)).r + 0.5);
+          int code = int(texture(uCodes, vec2(u, 0.5)).r * 255.0 + 0.5);
           float glyph = float(code) - 32.0;   // char - 32 -> 0..94
           if(glyph >= 0.0 && glyph < 95.0){
             a = fontPix(glyph, gx, gy);

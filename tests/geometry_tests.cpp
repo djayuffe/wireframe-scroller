@@ -91,14 +91,17 @@ int main(){
    // (drawScroller's codes[i]=(uint8_t)text[i]) + shader decode and checks that
    // every printable ASCII char round-trips to the correct glyph index (0..94),
    // and that a position is NOT confused with a code (the old bug).
-   { auto enc=[&](const std::string& s){std::vector<uint8_t> c(s.size());for(size_t i=0;i<s.size();++i)c[i]=(uint8_t)s[i];return c;};
-     // Decode a strip position i the way scroller.frag does:
-     //   u = (i+0.5)/N; code = int(tex(u)+0.5); glyph = code - 32
-     auto decodeAt=[&](const std::vector<uint8_t>& strip,int i){
-       float u=(float(i)+0.5)/float(strip.size());
-       // GL_R8 stores the byte exactly; NEAREST at u=(i+.5)/N hits pixel i.
-       (void)u; int code=int(strip[i]); // exact byte (no float loss for 0..126)
-       return code-32; };
+    { auto enc=[&](const std::string& s){std::vector<uint8_t> c(s.size());for(size_t i=0;i<s.size();++i)c[i]=(uint8_t)s[i];return c;};
+      // Decode a strip position i the way scroller.frag ACTUALLY does on the GPU:
+      //   GL_R8 normalizes the stored byte b to float r = b/255 on read-back,
+      //   the shader does  int(r * 255.0 + 0.5)  to recover the byte, then -32.
+      // This exercises the REAL normalize->scale->round path (the previous test
+      // used int(strip[i]) — the exact byte — and short-circuited the path, so it
+      // would never catch the missing *255 that blanked the marquee).
+      auto decodeAt=[&](const std::vector<uint8_t>& strip,int i){
+        float r=(float)((double)strip[i]/255.0);   // GL_R8 read-back normalization
+        int code=(int)(r*255.0f+0.5f);             // scroller.frag: int(tex.r*255+0.5)
+        return code-32; };
      std::string all; for(char c=32;c<=126;++c)all+=c;
      auto strip=enc(all);
      req((int)strip.size()==95,"code strip 95 chars");
@@ -110,11 +113,19 @@ int main(){
      // whose ASCII code != position+32. Prove the new mapping differs from the
      // old for at least the common letters, so a regression to position-based
      // indexing is caught.
-     std::string hello="HELLO";auto hs=enc(hello);
-     int oldGlyphAt3=3-32;                 // position 3, old mapping
-     int newGlyphAt3=decodeAt(hs,3);       // 'L' = 76-32 = 44
-     req(newGlyphAt3==44&&oldGlyphAt3!=44,"code strip: 'L' decodes to 44, not position-32");
-   }
+      std::string hello="HELLO";auto hs=enc(hello);
+      int oldGlyphAt3=3-32;                 // position 3, old mapping
+      int newGlyphAt3=decodeAt(hs,3);       // 'L' = 76-32 = 44
+      req(newGlyphAt3==44&&oldGlyphAt3!=44,"code strip: 'L' decodes to 44, not position-32");
+      // Every printable ASCII byte must survive the GL_R8 normalize(->b/255) +
+      // shader scale(*255)+round( +0.5) exactly. This is the exact GPU data path;
+      // a missing *255 collapses all of 32..126 (all <0.5) to code 0.
+      for(int b=32;b<=126;++b){
+        float r=(float)((double)b/255.0);
+        int back=(int)(r*255.0f+0.5f);
+        if(back!=b){char m[64];std::snprintf(m,sizeof m,"GL_R8 round-trip byte %d -> %d",b,back);req(false,m);}
+      }
+    }
   // Image: decode + discovery (uses the repo's UBER logo pack when present)
   { Image miss;req(!Image::loadFromFile("/nonexistent/xyz.jpg",miss),"load missing -> false");
     // Logo pack path: injected by CMake (IW_TEST_LOGO_PACK) so the test runs
@@ -250,7 +261,11 @@ int main(){
       }
       // the scroller shader must use the GLSL `mod` builtin for bit extraction
       { std::ifstream f(shadersDir/"scroller.frag"); std::string all((std::istreambuf_iterator<char>(f)),std::istreambuf_iterator<char>());
-        req(all.find("mod(floor(v / pow(2.0, bit)), 2.0)")!=std::string::npos,"scroller uses GLSL mod builtin"); }
+        req(all.find("mod(floor(v / pow(2.0, bit)), 2.0)")!=std::string::npos,"scroller uses GLSL mod builtin");
+        // The code-strip decode MUST scale the GL_R8 read-back by 255 (the byte
+        // is normalized to [0,1] on read). A regression that drops the *255
+        // collapses every char to code 0 -> blank marquee (the original bug).
+        req(all.find("* 255.0")!=std::string::npos,"scroller code-strip decode scales GL_R8 by 255"); }
       // post.frag must be tempo-synced: the synthetic beat pulse must be driven
       // by uBpm (bpm/60 Hz), NOT a hard-coded 3.2 Hz. A regression that re-introduces
       // a fixed frequency would make the FX pulse at the wrong rate for --bpm != 192.
