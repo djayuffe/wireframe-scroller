@@ -120,12 +120,21 @@ int main(){
       // Every printable ASCII byte must survive the GL_R8 normalize(->b/255) +
       // shader scale(*255)+round( +0.5) exactly. This is the exact GPU data path;
       // a missing *255 collapses all of 32..126 (all <0.5) to code 0.
-      for(int b=32;b<=126;++b){
-        float r=(float)((double)b/255.0);
-        int back=(int)(r*255.0f+0.5f);
-        if(back!=b){char m[64];std::snprintf(m,sizeof m,"GL_R8 round-trip byte %d -> %d",b,back);req(false,m);}
-      }
-    }
+       for(int b=32;b<=126;++b){
+         float r=(float)((double)b/255.0);
+         int back=(int)(r*255.0f+0.5f);
+         if(back!=b){char m[64];std::snprintf(m,sizeof m,"GL_R8 round-trip byte %d -> %d",b,back);req(false,m);}
+       }
+      // drawScroller caps the code strip at 512 chars (kMaxCodes) — a longer
+      // marquee string is clipped, not allowed to overflow the 1x512 GL_R8
+      // storage. Mirror the exact cap logic here so a regression (removing the
+      // cap) is caught: the encoded strip for a 700-char string must be 512.
+      { const int kMaxCodes=512; std::string big(700,'A'); int n=(int)big.size(); if(n>kMaxCodes)n=kMaxCodes;
+        std::vector<uint8_t> codes((size_t)n); for(int i=0;i<n;++i)codes[i]=(uint8_t)big[i];
+        req((int)codes.size()==kMaxCodes,"code strip clips a 700-char string to the 512 cap");
+        // and the clipped prefix must still decode correctly (char 0 = 'A' = glyph 3)
+        req(decodeAt(codes,0)==65-32,"clipped code strip prefix decodes to 'A'"); }
+     }
   // Image: decode + discovery (uses the repo's UBER logo pack when present)
   { Image miss;req(!Image::loadFromFile("/nonexistent/xyz.jpg",miss),"load missing -> false");
     // Logo pack path: injected by CMake (IW_TEST_LOGO_PACK) so the test runs

@@ -87,8 +87,8 @@ bool Renderer::reinit(const std::string&dir){
   hdrFbo_=hdrTex_=depthRbo_=0;hdrW_=hdrH_=0;
   for(auto&L:logos_)if(L.tex)glDeleteTextures(1,&L.tex),L.tex=0;
   if(scrollerFontTex_)glDeleteTextures(1,&scrollerFontTex_),scrollerFontTex_=0;
-  if(scrollerCodesTex_)glDeleteTextures(1,&scrollerCodesTex_),scrollerCodesTex_=0;
-  bgTexA_=bgTexB_=0;bgCurrent_=bgTarget_=-1;bgMix_=0.f;hasLogos_=false;
+   if(scrollerCodesTex_)glDeleteTextures(1,&scrollerCodesTex_),scrollerCodesTex_=0,scrollerCodesTexW_=0;
+   bgTexA_=bgTexB_=0;bgCurrent_=bgTarget_=-1;bgMix_=0.f;hasLogos_=false;
   return createGl(dir);
 }
 bool Renderer::initBackground(const std::string&dir){std::string vs=readText(dir+"/bg.vert"),fs=readText(dir+"/bg.frag");if(vs.empty()||fs.empty())return false;bgProgram_=linkProgram(vs,fs,error_);if(!bgProgram_)return false;uBgMix_=glGetUniformLocation(bgProgram_,"uMix");uBgZoom_=glGetUniformLocation(bgProgram_,"uZoom");uBgAspect_=glGetUniformLocation(bgProgram_,"uAspect");uBgTexAspect_=glGetUniformLocation(bgProgram_,"uTexAspect");uBgOp_=glGetUniformLocation(bgProgram_,"uOpacity");uBgTime_=glGetUniformLocation(bgProgram_,"uTime");uBgMusic_=glGetUniformLocation(bgProgram_,"uMusicLevel");uBgTexA_=glGetUniformLocation(bgProgram_,"uTexA");uBgTexB_=glGetUniformLocation(bgProgram_,"uTexB");setupFullscreenVao(bgVao_,bgVbo_);return true;}
@@ -211,9 +211,9 @@ bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,flo
   // No logo: capture the wireframe into the HDR buffer (on a black clear). The
   // post/FX pass is deferred to finishLogoFrame() so the travelers (drawn next)
   // are captured too and get the same post-processing as in logo mode.
-  glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);glViewport(0,0,hdrW_,hdrH_);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);glEnable(GL_DEPTH_TEST);glUseProgram(program_);glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);glUniform1f(uTime_,t);if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);glLineWidth(std::max(1.f,lineWidth+ml*.75f));glBindVertexArray(vao_);glDrawElements(GL_LINES,edgeCount_,GL_UNSIGNED_INT,nullptr);glDisable(GL_DEPTH_TEST);
-  logoCapturePending_=true;
-  return true;}
+   glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);glViewport(0,0,hdrW_,hdrH_);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);glEnable(GL_DEPTH_TEST);glUseProgram(program_);glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);glUniform1f(uTime_,t);if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);glLineWidth(std::max(1.f,lineWidth+ml*.75f));glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);glBlendEquation(GL_FUNC_ADD);glBindVertexArray(vao_);glDrawElements(GL_LINES,edgeCount_,GL_UNSIGNED_INT,nullptr);glDisable(GL_BLEND);glDisable(GL_DEPTH_TEST);
+   logoCapturePending_=true;
+   return true;}
 bool Renderer::loadLogos(const std::string&dir){
   auto files=findLogos(dir);
   if(files.empty())return false;
@@ -405,18 +405,30 @@ bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,fl
    // code. The shader reads this to map a marquee POSITION to the right glyph
    // (the position alone is not the character). Uploaded every frame (the text
    // is at most a few hundred bytes) into a dynamic 1xN GL_R8 texture.
-   int n=0; while(text[n])++n;
-   std::vector<uint8_t> codes((size_t)n);
-   for(int i=0;i<n;++i)codes[i]=(uint8_t)text[i];
-   if(!scrollerCodesTex_)glGenTextures(1,&scrollerCodesTex_);
-   glBindTexture(GL_TEXTURE_2D,scrollerCodesTex_);
-   glPixelStorei(GL_UNPACK_ALIGNMENT,1);
-   glTexImage2D(GL_TEXTURE_2D,0,GL_R8,(GLsizei)n,1,0,GL_RED,GL_UNSIGNED_BYTE,codes.data());
-   glPixelStorei(GL_UNPACK_ALIGNMENT,4);
-   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
-   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    int n=0; while(text[n])++n;
+    std::vector<uint8_t> codes((size_t)n);
+    for(int i=0;i<n;++i)codes[i]=(uint8_t)text[i];
+    // The code strip is a small 1xN GL_R8 texture (one byte per character).
+    // Allocate immutable storage ONCE at a fixed cap (512 chars — far more than
+    // any marquee string) and update it per frame with glTexSubImage2D. The old
+    // code did a full glTexImage2D every frame, which re-allocated GPU memory
+    // each frame (a needless hitch). glTexSubImage2D updates in place.
+    const GLsizei kMaxCodes=512;
+    if(n>kMaxCodes)n=kMaxCodes;
+    if(!scrollerCodesTex_)glGenTextures(1,&scrollerCodesTex_);
+    glBindTexture(GL_TEXTURE_2D,scrollerCodesTex_);
+    if(scrollerCodesTexW_<kMaxCodes){
+      scrollerCodesTexW_=kMaxCodes;
+      glPixelStorei(GL_UNPACK_ALIGNMENT,1);
+      glTexStorage2D(GL_TEXTURE_2D,1,GL_R8,kMaxCodes,1);
+      glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    }
+    glPixelStorei(GL_UNPACK_ALIGNMENT,1);
+    glTexSubImage2D(GL_TEXTURE_2D,0,0,0,n,1,GL_RED,GL_UNSIGNED_BYTE,codes.data());
+    glPixelStorei(GL_UNPACK_ALIGNMENT,4);
    glUseProgram(scrollerProgram_);
    if(uScTime_>=0)glUniform1f(uScTime_,time);
    if(uScPhase_>=0)glUniform1f(uScPhase_,beatPhase);
@@ -445,4 +457,4 @@ bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,fl
    glBindTexture(GL_TEXTURE_2D,0);
    return true;
  }
-void Renderer::shutdown(){for(auto&L:logos_)if(L.tex)glDeleteTextures(1,&L.tex);logos_.clear();if(scrollerFontTex_)glDeleteTextures(1,&scrollerFontTex_);if(scrollerCodesTex_)glDeleteTextures(1,&scrollerCodesTex_);scrollerCodesTex_=0;if(hdrFbo_)glDeleteFramebuffers(1,&hdrFbo_);if(hdrTex_)glDeleteTextures(1,&hdrTex_);if(depthRbo_)glDeleteRenderbuffers(1,&depthRbo_);if(postProgram_)glDeleteProgram(postProgram_);if(postVao_)glDeleteVertexArrays(1,&postVao_);if(postVbo_)glDeleteBuffers(1,&postVbo_);if(scrollerProgram_)glDeleteProgram(scrollerProgram_);if(scrollerVao_)glDeleteVertexArrays(1,&scrollerVao_);if(scrollerVbo_)glDeleteBuffers(1,&scrollerVbo_);if(bgProgram_)glDeleteProgram(bgProgram_);if(bgVao_)glDeleteVertexArrays(1,&bgVao_);if(bgVbo_)glDeleteBuffers(1,&bgVbo_);if(travelerProgram_)glDeleteProgram(travelerProgram_);if(travelerVao_)glDeleteVertexArrays(1,&travelerVao_);if(travelerVbo_)glDeleteBuffers(1,&travelerVbo_);if(travelerEbo_)glDeleteBuffers(1,&travelerEbo_);if(program_)glDeleteProgram(program_);if(ebo_)glDeleteBuffers(1,&ebo_);if(vbo_)glDeleteBuffers(1,&vbo_);if(vao_)glDeleteVertexArrays(1,&vao_);program_=postProgram_=scrollerProgram_=bgProgram_=travelerProgram_=vao_=postVao_=postVbo_=scrollerVao_=scrollerVbo_=bgVao_=bgVbo_=travelerVao_=vbo_=ebo_=travelerVbo_=travelerEbo_=scrollerFontTex_=hdrFbo_=hdrTex_=depthRbo_=0;}
+void Renderer::shutdown(){for(auto&L:logos_)if(L.tex)glDeleteTextures(1,&L.tex);logos_.clear();if(scrollerFontTex_)glDeleteTextures(1,&scrollerFontTex_);if(scrollerCodesTex_)glDeleteTextures(1,&scrollerCodesTex_);scrollerCodesTex_=0,scrollerCodesTexW_=0;if(hdrFbo_)glDeleteFramebuffers(1,&hdrFbo_);if(hdrTex_)glDeleteTextures(1,&hdrTex_);if(depthRbo_)glDeleteRenderbuffers(1,&depthRbo_);if(postProgram_)glDeleteProgram(postProgram_);if(postVao_)glDeleteVertexArrays(1,&postVao_);if(postVbo_)glDeleteBuffers(1,&postVbo_);if(scrollerProgram_)glDeleteProgram(scrollerProgram_);if(scrollerVao_)glDeleteVertexArrays(1,&scrollerVao_);if(scrollerVbo_)glDeleteBuffers(1,&scrollerVbo_);if(bgProgram_)glDeleteProgram(bgProgram_);if(bgVao_)glDeleteVertexArrays(1,&bgVao_);if(bgVbo_)glDeleteBuffers(1,&bgVbo_);if(travelerProgram_)glDeleteProgram(travelerProgram_);if(travelerVao_)glDeleteVertexArrays(1,&travelerVao_);if(travelerVbo_)glDeleteBuffers(1,&travelerVbo_);if(travelerEbo_)glDeleteBuffers(1,&travelerEbo_);if(program_)glDeleteProgram(program_);if(ebo_)glDeleteBuffers(1,&ebo_);if(vbo_)glDeleteBuffers(1,&vbo_);if(vao_)glDeleteVertexArrays(1,&vao_);program_=postProgram_=scrollerProgram_=bgProgram_=travelerProgram_=vao_=postVao_=postVbo_=scrollerVao_=scrollerVbo_=bgVao_=bgVbo_=travelerVao_=vbo_=ebo_=travelerVbo_=travelerEbo_=scrollerFontTex_=hdrFbo_=hdrTex_=depthRbo_=0;}
