@@ -14,6 +14,7 @@
 #endif
 #include "Renderer.hpp"
 #include "Scene.hpp"
+#include "WindowSpec.hpp"
 #include "Timeline.hpp"
 #include "Audio.hpp"
 #include "Effects.hpp"
@@ -46,14 +47,15 @@ static std::vector<std::filesystem::path> logoCandidates(const std::filesystem::
     auto p=exeDir;
     while(p.has_parent_path()&&p.parent_path()!=p){ p=p.parent_path(); c.push_back(p/"UBER_Fullscreen_Logo_Pack"); }
   }
-  return c;
-}
+   return c;
+ }
 
 int main(int argc,char**argv){
-  double bpm=132.0;std::filesystem::path musicPath,logoOverride;bool noScroller=false,noPost=false;
-  bool haveRecipe=false; int recipeArg=0;  // haveRecipe=false -> auto mode
-  double quality=1.0;  // render scale: the HDR target is W*quality x H*quality
-  std::string screenshotPath; int maxFrames=0;  // --screenshot PATH / --frames N
+   double bpm=132.0;std::filesystem::path musicPath,logoOverride;bool noScroller=false,noPost=false;
+   bool haveRecipe=false; int recipeArg=0;  // haveRecipe=false -> auto mode
+   double quality=1.0;  // render scale: the HDR target is W*quality x H*quality
+   int winW=0,winH=0; bool fullscreen=false;  // --window WxH / --fullscreen
+   std::string screenshotPath; int maxFrames=0;  // --screenshot PATH / --frames N
   for(int i=1;i<argc;i++){
     std::string arg(argv[i]);
     if(arg=="--bpm"&&i+1<argc)bpm=std::max(1.0,std::atof(argv[++i]));
@@ -62,13 +64,19 @@ int main(int argc,char**argv){
     else if(arg=="--no-post")noPost=true;
     else if(arg=="--quality"&&i+1<argc)quality=std::clamp(std::atof(argv[++i]),0.25,1.0);
     else if(arg=="--logos"&&i+1<argc)logoOverride=argv[++i];
+    else if(arg=="--window"&&i+1<argc){
+       std::string werr; int ww,wh;
+       if(!parseWindowSpec(argv[++i],ww,wh,werr)){std::fprintf(stderr,"--window: %s\n",werr.c_str());return 2;}
+       winW=ww;winH=wh;
+      }
+    else if(arg=="--fullscreen")fullscreen=true;
     else if(arg=="--recipe"&&i+1<argc){recipeArg=std::atoi(argv[++i]);haveRecipe=true;}
-    else if(arg=="--version"){std::fprintf(stdout,"Impossible Wireframe v4.25\n");return 0;}
+    else if(arg=="--version"){std::fprintf(stdout,"Impossible Wireframe v4.26\n");return 0;}
     else if(arg=="--screenshot"&&i+1<argc){screenshotPath=argv[++i];}
     else if(arg=="--frames"&&i+1<argc){maxFrames=std::max(0,std::atoi(argv[++i]));}
     else if(arg=="--help"||arg=="-h"){
       std::fprintf(stdout,
-        "Impossible Wireframe v4.25\n"
+        "Impossible Wireframe v4.26\n"
         "Usage: impossible_wireframe [options]\n"
         "  --bpm N         Tempo (default 132)\n"
         "  --music PATH    Audio module/wav to play (default: assets/music if present)\n"
@@ -78,6 +86,10 @@ int main(int argc,char**argv){
         "                  default 1.0; lower = faster on weak GPUs)\n"
         "  --logos DIR     Directory of UBER_*_1920x1080.jpg logo cards\n"
         "  --recipe N      Start in recipe mode with curated recipe N (0-23)\n"
+        "  --window WxH    Initial window size, e.g. --window 1920x1080\n"
+        "                  (default 1440x900; 320x200 .. 3840x2160)\n"
+        "  --fullscreen    Start full-screen on the primary monitor (uncapped\n"
+        "                  refresh; overrides --window)\n"
         "  --screenshot P  Save one PNG frame to P (then continue running)\n"
         "  --frames N      Exit after N frames (0 = run forever; for automated\n"
         "                  verification, e.g. --frames 30 --screenshot out.png)\n"
@@ -102,7 +114,23 @@ int main(int argc,char**argv){
 #ifdef __APPLE__
  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT,GL_TRUE);
 #endif
- GLFWwindow*w=glfwCreateWindow(1440,900,"Impossible Wireframe v4.25",nullptr,nullptr);if(!w){std::fprintf(stderr,"OpenGL 4.1 context creation failed\n");glfwTerminate();return 2;}glfwMakeContextCurrent(w);glfwSwapInterval(1);
+  // --window WxH and --fullscreen. For fullscreen, grab the primary monitor's
+  // native mode and use it at full size (the most portable "fullscreen" across
+  // macOS/Linux/Windows — true exclusive fullscreen needs per-OS mode-setting,
+  // which GLFW abstracts via glfwSetWindowMonitor). If BOTH --window and
+  // --fullscreen are given, fullscreen wins (and --window is ignored).
+  GLFWmonitor* mon=fullscreen?glfwGetPrimaryMonitor():nullptr;
+  const GLFWvidmode* vm=mon?glfwGetVideoMode(mon):nullptr;
+  int cw,ch;
+  if(fullscreen){
+    cw=vm?vm->width:1920; ch=vm?vm->height:1080;
+  } else {
+    cw=winW>0?winW:1440; ch=winH>0?winH:900;
+  }
+  GLFWwindow*w=glfwCreateWindow(cw,ch,"Impossible Wireframe v4.26",mon,nullptr);
+  if(!w){std::fprintf(stderr,"OpenGL 4.1 context creation failed\n");glfwTerminate();return 2;}
+  if(fullscreen)glfwSetWindowMonitor(w,mon,0,0,cw,ch,vm?vm->refreshRate:0);
+  glfwMakeContextCurrent(w);glfwSwapInterval(fullscreen?0:1);  // uncapped in fullscreen
  AudioPlayer audio;
 #if defined(IW_HAS_AUDIO)
  if(SDL_InitSubSystem(SDL_INIT_AUDIO)!=0) std::fprintf(stderr,"SDL audio init failed: %s\n",SDL_GetError());

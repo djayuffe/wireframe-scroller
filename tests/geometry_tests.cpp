@@ -5,6 +5,7 @@
 #include "TextScroller.hpp"
 #include "Timeline.hpp"
 #include "Effects.hpp"
+#include "WindowSpec.hpp"
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
@@ -287,5 +288,24 @@ int main(){
         req(all.find("uBypass")!=std::string::npos,"post.frag declares uBypass");
       }
     }
-    std::cout<<"geometry_tests: PASS; exact 120-cell V="<<c120.v.size()<<" E="<<c120.e.size()<<"\n";
+   // --window WxH parsing: the shared parseWindowSpec (include/WindowSpec.hpp)
+   // must accept valid specs (lower- and upper-case separator) and reject
+   // malformed / out-of-range ones, so a bad --window is a clean exit-2 (not a
+   // crash or a silently-clamped window).
+   { std::string e; int w,h;
+    req(parseWindowSpec("1920x1080",w,h,e)&&w==1920&&h==1080,"window: 1920x1080");
+    req(parseWindowSpec("1280X720",w,h,e)&&w==1280&&h==720,"window: 1280X720 (upper-case X)");
+    req(parseWindowSpec("1440x900",w,h,e)&&w==1440&&h==900,"window: 1440x900 (default)");
+    req(!parseWindowSpec("1920",w,h,e),"window: '1920' (no H) rejected");
+    req(!parseWindowSpec("1920x",w,h,e),"window: '1920x' (no H) rejected");
+    req(!parseWindowSpec("x1080",w,h,e),"window: 'x1080' (no W) rejected");
+    req(!parseWindowSpec("1920 1080",w,h,e),"window: '1920 1080' (space) rejected");
+    req(!parseWindowSpec("1920x1080x24",w,h,e),"window: trailing junk rejected");
+    req(!parseWindowSpec("100x100",w,h,e),"window: below 320x200 rejected");
+    req(!parseWindowSpec("99999x1080",w,h,e),"window: above 3840 width rejected");
+    req(!parseWindowSpec("1920x99999",w,h,e),"window: above 2160 height rejected");
+    req(parseWindowSpec("320x200",w,h,e)&&w==320&&h==200,"window: 320x200 (min boundary) ok");
+    req(parseWindowSpec("3840x2160",w,h,e)&&w==3840&&h==2160,"window: 3840x2160 (max boundary) ok");
+  }
+  std::cout<<"geometry_tests: PASS; exact 120-cell V="<<c120.v.size()<<" E="<<c120.e.size()<<"\n";
  }

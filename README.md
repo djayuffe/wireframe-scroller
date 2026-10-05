@@ -1,6 +1,6 @@
-# macOS Impossible Wireframe
+# Impossible Wireframe
 
-C++20 / OpenGL 4.1 Core wireframe demoscene for macOS, focused on mathematically unusual geometry, HDR-style shader compositing, and tracker-music-reactive motion. The project packages the audited impossible-wireframe design as a standalone public repo with tests, provenance, screenshots, and bundled demo music.
+C++20 / OpenGL 4.1 Core wireframe demoscene for macOS, Linux, and Windows, focused on mathematically unusual geometry, HDR-style shader compositing, and tracker-music-reactive motion. The project packages the audited impossible-wireframe design as a standalone public repo with tests, provenance, screenshots, and bundled demo music.
 
 Copyright (c) 2026 Ulf Bertilsson. Code is MIT licensed.
 
@@ -99,6 +99,10 @@ If OpenGL/GLFW are absent, CMake still builds `iw_geometry` and `geometry_tests`
   procedural background, …). The 3D wireframe + logo + travelers are still
   composited and tone-mapped; only the Uber-compositor effects are skipped.
   Useful for debugging and for maximum frame rate.
+- `--window WxH`: initial window size, e.g. `--window 1920x1080` (default
+  1440x900; valid range 320x200 .. 3840x2160).
+- `--fullscreen`: start full-screen on the primary monitor at its native
+  resolution, uncapped refresh (overrides `--window`).
 
 ## Visual layers
 The renderer composites four layers, back to front:
