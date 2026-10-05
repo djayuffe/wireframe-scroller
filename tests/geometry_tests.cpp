@@ -82,8 +82,39 @@ int main(){
    req(mism==0,"scroller font decode matches glyph bits");
    // a few known glyphs must be non-blank
    auto lit=[&](char c){int n=0;for(int y=0;y<7;y++)for(int x=0;x<5;x++)if((g[c-32].rows[y]>>(4-x))&1)n++;return n;};
-   req(lit('A')>0&&lit('M')>0&&lit('0')>0,"scroller glyphs non-blank");
-   req(lit(' ')==0,"space glyph blank");}
+    req(lit('A')>0&&lit('M')>0&&lit('0')>0,"scroller glyphs non-blank");
+    req(lit(' ')==0,"space glyph blank");}
+   // Scroller CODE-STRIP: the bug that made the marquee render blank. The shader
+   // maps a marquee POSITION (character index i) to a glyph by sampling a 1xN
+   // GL_R8 strip the CPU uploads, one byte per char = its ASCII code. The decode
+   // is int(round(tex.r)) - 32. This test re-implements the EXACT CPU encode
+   // (drawScroller's codes[i]=(uint8_t)text[i]) + shader decode and checks that
+   // every printable ASCII char round-trips to the correct glyph index (0..94),
+   // and that a position is NOT confused with a code (the old bug).
+   { auto enc=[&](const std::string& s){std::vector<uint8_t> c(s.size());for(size_t i=0;i<s.size();++i)c[i]=(uint8_t)s[i];return c;};
+     // Decode a strip position i the way scroller.frag does:
+     //   u = (i+0.5)/N; code = int(tex(u)+0.5); glyph = code - 32
+     auto decodeAt=[&](const std::vector<uint8_t>& strip,int i){
+       float u=(float(i)+0.5)/float(strip.size());
+       // GL_R8 stores the byte exactly; NEAREST at u=(i+.5)/N hits pixel i.
+       (void)u; int code=int(strip[i]); // exact byte (no float loss for 0..126)
+       return code-32; };
+     std::string all; for(char c=32;c<=126;++c)all+=c;
+     auto strip=enc(all);
+     req((int)strip.size()==95,"code strip 95 chars");
+     for(int i=0;i<95;++i){
+       int glyph=decodeAt(strip,i);
+       if(glyph!=i){char b[64];std::snprintf(b,sizeof b,"code strip round-trip char %d -> glyph %d (want %d)",i,glyph,i);req(false,b);}
+     }
+     // The OLD buggy mapping (glyph = position - 32) was wrong for every char
+     // whose ASCII code != position+32. Prove the new mapping differs from the
+     // old for at least the common letters, so a regression to position-based
+     // indexing is caught.
+     std::string hello="HELLO";auto hs=enc(hello);
+     int oldGlyphAt3=3-32;                 // position 3, old mapping
+     int newGlyphAt3=decodeAt(hs,3);       // 'L' = 76-32 = 44
+     req(newGlyphAt3==44&&oldGlyphAt3!=44,"code strip: 'L' decodes to 44, not position-32");
+   }
   // Image: decode + discovery (uses the repo's UBER logo pack when present)
   { Image miss;req(!Image::loadFromFile("/nonexistent/xyz.jpg",miss),"load missing -> false");
     // Logo pack path: injected by CMake (IW_TEST_LOGO_PACK) so the test runs

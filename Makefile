@@ -39,7 +39,6 @@ CMAKE_FLAGS := -DCMAKE_BUILD_TYPE=$(TYPE) -DIW_BUILD_TESTS=ON $(CMAKE_EXTRA)
 # CMake itself re-runs when CMakeLists.txt changes — this is a backstop for
 # the build-type / generator case.)
 STAMP := $(BUILD_DIR)/.stamp
-CMAKE_STAMP_SRC := CMakeLists.txt Makefile
 
 .PHONY: all configure build test run run-pulse clean reconfigure diag help stamp
 

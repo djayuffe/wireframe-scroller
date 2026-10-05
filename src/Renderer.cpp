@@ -35,6 +35,11 @@ void setupFullscreenVao(unsigned& vao,unsigned& vbo){glGenVertexArrays(1,&vao);g
 // Create all GL objects (programs, VAOs, buffers, textures, HDR FBO). Called by
 // init() and reinit() (after a context loss). Must run with a current context.
 bool Renderer::createGl(const std::string&dir){
+  // Reset mesh/HDR/scroll state so a reinit (after a context loss) doesn't
+  // carry stale capacities or a stale capture flag from the dead context.
+  // First init these are already 0/false.
+  edgeCount_=0;vboCapacity_=0;eboCapacity_=0;
+  hdrW_=hdrH_=0;logoCapturePending_=false;hasLogos_=false;
   std::string vs=readText(dir+"/wire.vert"),fs=readText(dir+"/wire.frag");
   if(vs.empty()||fs.empty()){error_="cannot read shaders from "+dir;return false;}
   program_=linkProgram(vs,fs,error_);
@@ -70,11 +75,12 @@ bool Renderer::reinit(const std::string&dir){
   hdrFbo_=hdrTex_=depthRbo_=0;hdrW_=hdrH_=0;
   for(auto&L:logos_)if(L.tex)glDeleteTextures(1,&L.tex),L.tex=0;
   if(scrollerFontTex_)glDeleteTextures(1,&scrollerFontTex_),scrollerFontTex_=0;
+  if(scrollerCodesTex_)glDeleteTextures(1,&scrollerCodesTex_),scrollerCodesTex_=0;
   bgTexA_=bgTexB_=0;bgCurrent_=bgTarget_=-1;bgMix_=0.f;hasLogos_=false;
   return createGl(dir);
 }
 bool Renderer::initBackground(const std::string&dir){std::string vs=readText(dir+"/bg.vert"),fs=readText(dir+"/bg.frag");if(vs.empty()||fs.empty())return false;bgProgram_=linkProgram(vs,fs,error_);if(!bgProgram_)return false;uBgMix_=glGetUniformLocation(bgProgram_,"uMix");uBgZoom_=glGetUniformLocation(bgProgram_,"uZoom");uBgAspect_=glGetUniformLocation(bgProgram_,"uAspect");uBgTexAspect_=glGetUniformLocation(bgProgram_,"uTexAspect");uBgOp_=glGetUniformLocation(bgProgram_,"uOpacity");uBgTime_=glGetUniformLocation(bgProgram_,"uTime");uBgMusic_=glGetUniformLocation(bgProgram_,"uMusicLevel");uBgTexA_=glGetUniformLocation(bgProgram_,"uTexA");uBgTexB_=glGetUniformLocation(bgProgram_,"uTexB");setupFullscreenVao(bgVao_,bgVbo_);return true;}
-bool Renderer::initTravelers(const std::string&dir){std::string vs=readText(dir+"/traveler.vert"),fs=readText(dir+"/traveler.frag");if(vs.empty()||fs.empty())return false;travelerProgram_=linkProgram(vs,fs,error_);if(!travelerProgram_)return false;uTrMVP_=glGetUniformLocation(travelerProgram_,"uMVP");uTrTime_=glGetUniformLocation(travelerProgram_,"uTime");uTrColor_=glGetUniformLocation(travelerProgram_,"uColor");
+bool Renderer::initTravelers(const std::string&dir){std::string vs=readText(dir+"/traveler.vert"),fs=readText(dir+"/traveler.frag");if(vs.empty()||fs.empty())return false;travelerProgram_=linkProgram(vs,fs,error_);if(!travelerProgram_)return false;uTrMVP_=glGetUniformLocation(travelerProgram_,"uMVP");uTrTime_=glGetUniformLocation(travelerProgram_,"uTime");uTrColor_=glGetUniformLocation(travelerProgram_,"uColor");uTrSpeed_=glGetUniformLocation(travelerProgram_,"uSpeed");
   // Build 12 travelers, each a unit octahedron (6 verts, 12 edges), with a
   // per-vertex path attribute.
   const int TR=12;
@@ -111,7 +117,7 @@ bool Renderer::initTravelers(const std::string&dir){std::string vs=readText(dir+
    travelerEdgeCount_=(int)idx.size();
    glBindVertexArray(0);
    return true;}
-bool Renderer::initScroller(const std::string&dir){std::string vs=readText(dir+"/scroller.vert"),fs=readText(dir+"/scroller.frag");if(vs.empty()||fs.empty()){error_="cannot read scroller shaders";return false;}scrollerProgram_=linkProgram(vs,fs,error_);if(!scrollerProgram_)return false;uScTime_=glGetUniformLocation(scrollerProgram_,"uTime");uScPhase_=glGetUniformLocation(scrollerProgram_,"uBeatPhase");uScRes_=glGetUniformLocation(scrollerProgram_,"uResolution");uScMusic_=glGetUniformLocation(scrollerProgram_,"uMusicLevel");uScOffset_=glGetUniformLocation(scrollerProgram_,"uScrollOffset");uScTextWidth_=glGetUniformLocation(scrollerProgram_,"uTextWidth");uScFont_=glGetUniformLocation(scrollerProgram_,"uFont");uScOpacity_=glGetUniformLocation(scrollerProgram_,"uOpacity");setupFullscreenVao(scrollerVao_,scrollerVbo_);glGenTextures(1,&scrollerFontTex_);auto data=textfont::pack();
+bool Renderer::initScroller(const std::string&dir){std::string vs=readText(dir+"/scroller.vert"),fs=readText(dir+"/scroller.frag");if(vs.empty()||fs.empty()){error_="cannot read scroller shaders";return false;}scrollerProgram_=linkProgram(vs,fs,error_);if(!scrollerProgram_)return false;uScTime_=glGetUniformLocation(scrollerProgram_,"uTime");uScPhase_=glGetUniformLocation(scrollerProgram_,"uBeatPhase");uScRes_=glGetUniformLocation(scrollerProgram_,"uResolution");uScMusic_=glGetUniformLocation(scrollerProgram_,"uMusicLevel");uScOffset_=glGetUniformLocation(scrollerProgram_,"uScrollOffset");uScTextWidth_=glGetUniformLocation(scrollerProgram_,"uTextWidth");uScFont_=glGetUniformLocation(scrollerProgram_,"uFont");uScCodes_=glGetUniformLocation(scrollerProgram_,"uCodes");uScCount_=glGetUniformLocation(scrollerProgram_,"uCount");uScOpacity_=glGetUniformLocation(scrollerProgram_,"uOpacity");setupFullscreenVao(scrollerVao_,scrollerVbo_);glGenTextures(1,&scrollerFontTex_);auto data=textfont::pack();
     // 1x665 GL_R8 GL_TEXTURE_2D (NOT 1D — Apple's Metal-based OpenGL driver
     // does not support 1D textures; glTexImage1D is a silent no-op there).
      glBindTexture(GL_TEXTURE_2D,scrollerFontTex_);
@@ -159,14 +165,14 @@ bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,flo
     glDrawElements(GL_LINES,edgeCount_,GL_UNSIGNED_INT,nullptr);
     glDisable(GL_BLEND);
     glDisable(GL_DEPTH_TEST);
-    logoCapturePending_=true; logoSceneIdx_=sceneIndex; logoTime_=t;
+    logoCapturePending_=true;
     return true;
   }
   // No logo: capture the wireframe into the HDR buffer (on a black clear). The
   // post/FX pass is deferred to finishLogoFrame() so the travelers (drawn next)
   // are captured too and get the same post-processing as in logo mode.
   glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);glViewport(0,0,width,height);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);glEnable(GL_DEPTH_TEST);glUseProgram(program_);glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);glUniform1f(uTime_,t);if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);glLineWidth(std::max(1.f,lineWidth+ml*.75f));glBindVertexArray(vao_);glDrawElements(GL_LINES,edgeCount_,GL_UNSIGNED_INT,nullptr);glDisable(GL_DEPTH_TEST);
-  logoCapturePending_=true; logoSceneIdx_=sceneIndex; logoTime_=t;
+  logoCapturePending_=true;
   return true;}
 bool Renderer::loadLogos(const std::string&dir){
   auto files=findLogos(dir);
@@ -272,9 +278,10 @@ bool Renderer::drawTravelers(float time,int width,int height,float aspect,float 
    glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);
   glEnable(GL_DEPTH_TEST);
   glUseProgram(travelerProgram_);
-  if(uTrMVP_>=0)glUniformMatrix4fv(uTrMVP_,1,GL_FALSE,M);
-  if(uTrTime_>=0)glUniform1f(uTrTime_,time);
-  if(uTrColor_>=0)glUniform3f(uTrColor_,1.0f,0.9f,1.2f);
+   if(uTrMVP_>=0)glUniformMatrix4fv(uTrMVP_,1,GL_FALSE,M);
+   if(uTrTime_>=0)glUniform1f(uTrTime_,time);
+   if(uTrSpeed_>=0)glUniform1f(uTrSpeed_,0.85f);
+   if(uTrColor_>=0)glUniform3f(uTrColor_,1.0f,0.9f,1.2f);
   glLineWidth(1.4f+std::clamp(musicLevel,0.f,1.f)*1.0f);
   if(hasLogos_){glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);glBlendEquation(GL_FUNC_ADD);}
   glBindVertexArray(travelerVao_);
@@ -327,33 +334,54 @@ bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,fl
    }
    return true;
  }
- bool Renderer::drawScroller(float time,float beatPhase,int width,int height,const char*text,float musicLevel){
-  if(!scrollerProgram_||!text||!text[0])return false;
-  // Measure text in font pixels (scale=4, spacing=1).
-  float scale=6.0f;  // must match scroller.frag
-  float textWidth=(float)textfont::measure(text,1)*scale;
-  float offset=scrollOffset(time,beatPhase,(float)width,(int)textWidth,musicLevel);
-  glUseProgram(scrollerProgram_);
-  if(uScTime_>=0)glUniform1f(uScTime_,time);
-  if(uScPhase_>=0)glUniform1f(uScPhase_,beatPhase);
-  if(uScRes_>=0)glUniform2f(uScRes_,(float)width,(float)height);
-  if(uScMusic_>=0)glUniform1f(uScMusic_,std::clamp(musicLevel,0.f,1.f));
-  if(uScOffset_>=0)glUniform1f(uScOffset_,offset);
-  if(uScTextWidth_>=0)glUniform1f(uScTextWidth_,textWidth);
-  if(uScOpacity_>=0)glUniform1f(uScOpacity_,0.95f);
-  glActiveTexture(GL_TEXTURE1);
-  glBindTexture(GL_TEXTURE_2D,scrollerFontTex_);
-  if(uScFont_>=0)glUniform1i(uScFont_,1);
+  bool Renderer::drawScroller(float time,float beatPhase,int width,int height,const char*text,float musicLevel){
+   if(!scrollerProgram_||!text||!text[0])return false;
+   // Measure text in font pixels (scale=6, spacing=1).
+   float scale=6.0f;  // must match scroller.frag
+   float textWidth=(float)textfont::measure(text,1)*scale;
+   float offset=scrollOffset(time,beatPhase,(float)width,(int)textWidth,musicLevel);
+   // Build a 1-char code strip: one byte per visible character = its ASCII
+   // code. The shader reads this to map a marquee POSITION to the right glyph
+   // (the position alone is not the character). Uploaded every frame (the text
+   // is at most a few hundred bytes) into a dynamic 1xN GL_R8 texture.
+   int n=0; while(text[n])++n;
+   std::vector<uint8_t> codes((size_t)n);
+   for(int i=0;i<n;++i)codes[i]=(uint8_t)text[i];
+   if(!scrollerCodesTex_)glGenTextures(1,&scrollerCodesTex_);
+   glBindTexture(GL_TEXTURE_2D,scrollerCodesTex_);
+   glPixelStorei(GL_UNPACK_ALIGNMENT,1);
+   glTexImage2D(GL_TEXTURE_2D,0,GL_R8,(GLsizei)n,1,0,GL_RED,GL_UNSIGNED_BYTE,codes.data());
+   glPixelStorei(GL_UNPACK_ALIGNMENT,4);
+   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+   glUseProgram(scrollerProgram_);
+   if(uScTime_>=0)glUniform1f(uScTime_,time);
+   if(uScPhase_>=0)glUniform1f(uScPhase_,beatPhase);
+   if(uScRes_>=0)glUniform2f(uScRes_,(float)width,(float)height);
+   if(uScMusic_>=0)glUniform1f(uScMusic_,std::clamp(musicLevel,0.f,1.f));
+   if(uScOffset_>=0)glUniform1f(uScOffset_,offset);
+   if(uScTextWidth_>=0)glUniform1f(uScTextWidth_,textWidth);
+   if(uScCount_>=0)glUniform1i(uScCount_,n);
+   if(uScOpacity_>=0)glUniform1f(uScOpacity_,0.95f);
+   glActiveTexture(GL_TEXTURE1);
+   glBindTexture(GL_TEXTURE_2D,scrollerFontTex_);
+   if(uScFont_>=0)glUniform1i(uScFont_,1);
+   glActiveTexture(GL_TEXTURE2);
+   glBindTexture(GL_TEXTURE_2D,scrollerCodesTex_);
+   if(uScCodes_>=0)glUniform1i(uScCodes_,2);
   // The scroller shader outputs PREMULTIPLIED rgb (col*alpha, alpha), so the
   // blend must be (ONE, ONE_MINUS_SRC_ALPHA) — using SRC_ALPHA would dim the
   // text by alpha a second time.
   glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
   glDisable(GL_DEPTH_TEST);
   glViewport(0,0,width,height);
-  glBindVertexArray(scrollerVao_);
-  glDrawArrays(GL_TRIANGLES,0,3);
-  glDisable(GL_BLEND);
-  glActiveTexture(GL_TEXTURE0);
-  return true;
-}
-void Renderer::shutdown(){for(auto&L:logos_)if(L.tex)glDeleteTextures(1,&L.tex);logos_.clear();if(scrollerFontTex_)glDeleteTextures(1,&scrollerFontTex_);if(hdrFbo_)glDeleteFramebuffers(1,&hdrFbo_);if(hdrTex_)glDeleteTextures(1,&hdrTex_);if(depthRbo_)glDeleteRenderbuffers(1,&depthRbo_);if(postProgram_)glDeleteProgram(postProgram_);if(postVao_)glDeleteVertexArrays(1,&postVao_);if(postVbo_)glDeleteBuffers(1,&postVbo_);if(scrollerProgram_)glDeleteProgram(scrollerProgram_);if(scrollerVao_)glDeleteVertexArrays(1,&scrollerVao_);if(scrollerVbo_)glDeleteBuffers(1,&scrollerVbo_);if(bgProgram_)glDeleteProgram(bgProgram_);if(bgVao_)glDeleteVertexArrays(1,&bgVao_);if(bgVbo_)glDeleteBuffers(1,&bgVbo_);if(travelerProgram_)glDeleteProgram(travelerProgram_);if(travelerVao_)glDeleteVertexArrays(1,&travelerVao_);if(travelerVbo_)glDeleteBuffers(1,&travelerVbo_);if(travelerEbo_)glDeleteBuffers(1,&travelerEbo_);if(program_)glDeleteProgram(program_);if(ebo_)glDeleteBuffers(1,&ebo_);if(vbo_)glDeleteBuffers(1,&vbo_);if(vao_)glDeleteVertexArrays(1,&vao_);program_=postProgram_=scrollerProgram_=bgProgram_=travelerProgram_=vao_=postVao_=postVbo_=scrollerVao_=scrollerVbo_=bgVao_=bgVbo_=travelerVao_=vbo_=ebo_=travelerVbo_=travelerEbo_=scrollerFontTex_=hdrFbo_=hdrTex_=depthRbo_=0;}
+   glBindVertexArray(scrollerVao_);
+   glDrawArrays(GL_TRIANGLES,0,3);
+   glDisable(GL_BLEND);
+   glActiveTexture(GL_TEXTURE0);
+   glBindTexture(GL_TEXTURE_2D,0);
+   return true;
+ }
+void Renderer::shutdown(){for(auto&L:logos_)if(L.tex)glDeleteTextures(1,&L.tex);logos_.clear();if(scrollerFontTex_)glDeleteTextures(1,&scrollerFontTex_);if(scrollerCodesTex_)glDeleteTextures(1,&scrollerCodesTex_);scrollerCodesTex_=0;if(hdrFbo_)glDeleteFramebuffers(1,&hdrFbo_);if(hdrTex_)glDeleteTextures(1,&hdrTex_);if(depthRbo_)glDeleteRenderbuffers(1,&depthRbo_);if(postProgram_)glDeleteProgram(postProgram_);if(postVao_)glDeleteVertexArrays(1,&postVao_);if(postVbo_)glDeleteBuffers(1,&postVbo_);if(scrollerProgram_)glDeleteProgram(scrollerProgram_);if(scrollerVao_)glDeleteVertexArrays(1,&scrollerVao_);if(scrollerVbo_)glDeleteBuffers(1,&scrollerVbo_);if(bgProgram_)glDeleteProgram(bgProgram_);if(bgVao_)glDeleteVertexArrays(1,&bgVao_);if(bgVbo_)glDeleteBuffers(1,&bgVbo_);if(travelerProgram_)glDeleteProgram(travelerProgram_);if(travelerVao_)glDeleteVertexArrays(1,&travelerVao_);if(travelerVbo_)glDeleteBuffers(1,&travelerVbo_);if(travelerEbo_)glDeleteBuffers(1,&travelerEbo_);if(program_)glDeleteProgram(program_);if(ebo_)glDeleteBuffers(1,&ebo_);if(vbo_)glDeleteBuffers(1,&vbo_);if(vao_)glDeleteVertexArrays(1,&vao_);program_=postProgram_=scrollerProgram_=bgProgram_=travelerProgram_=vao_=postVao_=postVbo_=scrollerVao_=scrollerVbo_=bgVao_=bgVbo_=travelerVao_=vbo_=ebo_=travelerVbo_=travelerEbo_=scrollerFontTex_=hdrFbo_=hdrTex_=depthRbo_=0;}

@@ -148,6 +148,10 @@ int main(int argc,char**argv){
         // Re-load logo textures (the image data is still on disk; only the GL
         // textures were lost). logoCandidates() re-derives the search list.
         for(auto& c:logoCandidates(logoOverride,exeDir)){ if(r.loadLogos(c.string())){ recovered=true; break; } }
+        // Invalidate the mesh cache so the next frame re-uploads into the
+        // fresh VBO (the old buffer was destroyed with the context). Without
+        // this, lastMeshSig still matches and the new (empty) VBO is drawn.
+        lastMesh=nullptr;lastUploadScene=-1;lastMeshSig=std::make_tuple(0,0,-1.f);
       }
       if(!recovered){ std::fprintf(stderr,"context recovery failed; exiting\n"); break; }
       std::fprintf(stderr,"GL context recovered\n");

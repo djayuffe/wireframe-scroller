@@ -31,26 +31,34 @@ void main(){
   vec2 p=(uv*2.-1.)*vec2(uResolution.x/max(uResolution.y,1.),1.);
   float beat=pow(.5+.5*sin(uTime*3.2),14.0);          // synthetic 3.2 Hz pulse
   float mlev=uMusicLevel;
+  // 1.0 when a logo backdrop is in uScene (logo mode): the logo is a real
+  // 0-1 picture, so screen-space UV warps (lensing/shockwave/barrel/CA) would
+  // smear it into an unrecognizable smudge. Compute this BEFORE the warps so
+  // they can be gated off.
+  float hasLogo=step(.5,uHasLogo);
 
   // --- Screen-space UV warps (applied to the scene sample) -------------------
+  // These displace the sampling UV. They look great on a wireframe-on-black
+  // but destroy a photographic logo, so every warp is multiplied by
+  // (1.0-hasLogo) — a no-op in logo mode.
   vec2 suv=uv;
    // 1) Gravitational lensing: true 1/r^2 central magnification.
    // Clamp the displaced UV to [0,1] — near the center the magnification can
    // push it well outside the buffer, which would sample clamped black borders.
    { vec2 cp=suv-.5; float rr=max(length(cp),.035);
-     float lens=.35+.65*beat;
+     float lens=(.35+.65*beat)*(1.0-hasLogo);
      suv=clamp(.5+cp*(1.0+lens*.035/(rr*rr)),0.0,1.0); }
   // 2) Refractive shockwave ring: a Gaussian ring that displaces the image.
   { float shock=fract(uTime*.145);
     float r=length(suv-.5);
     float ring=exp(-pow((r-shock*.72)/.025,2.0));
-    suv=.5+(suv-.5)*(1.0-ring*.09*(.5+mlev)); }
+    suv=.5+(suv-.5)*(1.0-ring*.09*(.5+mlev)*(1.0-hasLogo)); }
   // 3) Barrel/lens breathing (pulse-driven).
   { vec2 bp=suv-.5; float r2=dot(bp,bp);
-    suv=.5+bp*(1.0+(.02+.05*beat)*r2); }
+    suv=.5+bp*(1.0+(.02+.05*beat)*r2*(1.0-hasLogo)); }
 
   // 4) Chromatic aberration (sample R/B at offset UVs, driven by pulse).
-  vec2 ca=(suv-.5)*(.002+.006*beat);
+  vec2 ca=(suv-.5)*(.002+.006*beat)*(1.0-hasLogo);
   vec3 scene=vec3(texture(uScene,suv+ca).r,texture(uScene,suv).g,texture(uScene,suv-ca).b);
 
   // bloom (multi-tap)
@@ -94,8 +102,8 @@ void main(){
 
   // In logo mode the scene already contains the logo backdrop, so skip the
   // procedural background (it would wash out the picture) and use a lower
-  // scene gain (the logo is 0-1, not a bright wireframe on black).
-  float hasLogo=step(.5,uHasLogo);
+  // scene gain (the logo is 0-1, not a bright wireframe on black). hasLogo is
+  // already computed above (before the warps).
   vec3 hdr=(1.0-hasLogo)*bg + scene*mix(1.35,1.0,hasLogo) + bloom*(.55+uMusicLevel*1.15);
   hdr+=(1.0-hasLogo)*pal(length(p)*.08+uTime*.02)*pow(max(scene.r,max(scene.g,scene.b)),2.2)*(.45+uMusicLevel);
 
@@ -121,10 +129,11 @@ void main(){
   float vign=1.-smoothstep(.55,1.85,length(p*vec2(.82,1.)));
   hdr*=max(.30,vign);
   // Pixel-shader soft shadow: a darkened ellipse "cast" below the wireframe,
-  // breathing with the scene scale and beat. Centered slightly low.
+  // breathing with the scene scale and beat. Centered slightly low. Gated off
+  // in logo mode — it would darken the center of the logo picture.
   float shScale=.62+.10*sin(uTime*.41)+.06*uMusicLevel;
   vec2 sc=(p-vec2(0.,-.55))/vec2(shScale,shScale*.5);
-  float shadow=exp(-dot(sc,sc))* .38;
+  float shadow=exp(-dot(sc,sc))* .38 * (1.0-hasLogo);
   hdr*= (1.0-shadow);
   // 9) Film grain (per-pixel, 60 fps time-quantized).
   hdr+=((hash(gl_FragCoord.xy+floor(uTime*60.))-.5)*.028);

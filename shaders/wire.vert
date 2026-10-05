@@ -11,5 +11,8 @@ void main(){
   gl_Position=p;
   vObject=aPos;
   vNdc=p.xy/max(abs(p.w),1e-5);
-  vDepth=clamp(1.0-abs(p.z/p.w)*0.16,0.15,1.0);
+  // Guard the depth division: a vertex at/near the clip plane (p.w ~ 0) would
+  // otherwise produce inf/nan, which clamps to a wrong depth band. Use the same
+  // 1e-5 floor as vNdc so a clipped vertex gets a bounded, clampable depth.
+  vDepth=clamp(1.0-abs(p.z/max(abs(p.w),1e-5))*0.16,0.15,1.0);
 }

@@ -13,6 +13,12 @@ uniform float uOpacity;
 // does not support 1D textures, so a 1-row 2D texture is used instead).
 // Each pixel = one row, MSB = leftmost column.
 uniform sampler2D uFont;
+// Per-character ASCII codes: a 1xN GL_R8 strip, N = number of characters in
+// the current string. uCodes[i] = the ASCII code of character i (0-based).
+// This is what maps a marquee POSITION to the correct glyph — the position
+// alone (floor(fi)) is NOT the character code.
+uniform sampler2D uCodes;
+uniform int uCount;
 
 // Sample one pixel of glyph g at (x 0..4, y 0..6).
 float fontPix(float g, float x, float y){
@@ -48,9 +54,15 @@ void main(){
       float gx = floor(fx / scale);
       float gy = floor((y - bandY0) / scale);
       if(gx >= 0.0 && gx < 5.0 && gy >= 0.0 && gy < 7.0){
-        float glyph = floor(fi) - 32.0;   // char - 32 -> 0..94
-        if(glyph >= 0.0 && glyph < 95.0){
-          a = fontPix(glyph, gx, gy);
+        int ci = int(floor(fi));
+        if(ci >= 0 && ci < uCount){
+          // Sample the code strip for this character's ASCII code.
+          float u = (float(ci) + 0.5) / float(uCount);
+          int code = int(texture(uCodes, vec2(u, 0.5)).r + 0.5);
+          float glyph = float(code) - 32.0;   // char - 32 -> 0..94
+          if(glyph >= 0.0 && glyph < 95.0){
+            a = fontPix(glyph, gx, gy);
+          }
         }
       }
     }

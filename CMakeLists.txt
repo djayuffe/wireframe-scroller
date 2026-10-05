@@ -13,21 +13,35 @@ cmake_minimum_required(VERSION 3.20)
 # Strategy: pin CMAKE_OSX_SYSROOT to the SDK xcrun actually reports (the one
 # matching the active toolchain) and set an explicit arch matching the host.
 # Pass -DIW_SYSROOT=<path> to override (e.g. a known-good older SDK).
+#
+# A stale CMAKE_OSX_SYSROOT cached from a PREVIOUS configure (pointing at a
+# since-removed CLT SDK) is the #1 real-world cause of the .tbd malformed-arch
+# failure, and "NOT DEFINED CMAKE_OSX_SYSROOT" does NOT catch it — a cached
+# value counts as DEFINED. So on a non-cross Apple build we ALWAYS re-pin from
+# xcrun unless the user explicitly overrode with -DIW_SYSROOT (cache FORCE
+# overwrites the stale entry).
 if(APPLE AND NOT CMAKE_CROSSCOMPILING)
-  if(NOT DEFINED IW_SYSROOT AND NOT DEFINED CMAKE_OSX_SYSROOT)
+  if(DEFINED IW_SYSROOT)
+    set(CMAKE_OSX_SYSROOT "${IW_SYSROOT}" CACHE PATH "macOS SDK sysroot (pinned before project())" FORCE)
+    message(STATUS "Using -DIW_SYSROOT override: ${IW_SYSROOT}")
+  else()
     execute_process(COMMAND xcrun --show-sdk-path
       OUTPUT_VARIABLE iw_sdk_path OUTPUT_STRIP_TRAILING_WHITESPACE
       ERROR_QUIET RESULT_VARIABLE iw_xcrun_rc)
-    if(iw_xcrun_rc EQUAL 0 AND EXISTS "${iw_sdk_path}/usr/lib/libSystem.tbd")
-      set(CMAKE_OSX_SYSROOT "${iw_sdk_path}" CACHE PATH "macOS SDK sysroot (pinned before project())" FORCE)
-      message(STATUS "Pinned macOS SDK sysroot: ${iw_sdk_path}")
-    elseif(iw_xcrun_rc EQUAL 0)
-      set(CMAKE_OSX_SYSROOT "${iw_sdk_path}" CACHE PATH "macOS SDK sysroot (pinned before project())" FORCE)
-      message(WARNING "xcrun SDK path ${iw_sdk_path} lacks usr/lib/libSystem.tbd; using it anyway")
+    if(iw_xcrun_rc EQUAL 0)
+      if(EXISTS "${iw_sdk_path}/usr/lib/libSystem.tbd")
+        set(CMAKE_OSX_SYSROOT "${iw_sdk_path}" CACHE PATH "macOS SDK sysroot (pinned before project())" FORCE)
+        message(STATUS "Pinned macOS SDK sysroot: ${iw_sdk_path}")
+      else()
+        set(CMAKE_OSX_SYSROOT "${iw_sdk_path}" CACHE PATH "macOS SDK sysroot (pinned before project())" FORCE)
+        message(WARNING "xcrun SDK path ${iw_sdk_path} lacks usr/lib/libSystem.tbd; using it anyway")
+      endif()
+    else()
+      # xcrun itself failed (CLT half-installed / not on PATH). A cached
+      # CMAKE_OSX_SYSROOT — if any — is now untrustworthy; warn loudly instead
+      # of silently using a possibly-stale root.
+      message(WARNING "xcrun --show-sdk-path failed (rc=${iw_xcrun_rc}); cannot pin the macOS SDK. If the build fails with 'malformed file ...tbd ... unknown architecture', run 'xcode-select --install' or pass -DIW_SYSROOT=<sdk path>.")
     endif()
-  elseif(DEFINED IW_SYSROOT)
-    set(CMAKE_OSX_SYSROOT "${IW_SYSROOT}" CACHE PATH "macOS SDK sysroot (pinned before project())" FORCE)
-    message(STATUS "Using -DIW_SYSROOT override: ${IW_SYSROOT}")
   endif()
   if(NOT DEFINED CMAKE_OSX_ARCHITECTURES)
     execute_process(COMMAND uname -m OUTPUT_VARIABLE iw_host_arch OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
@@ -90,7 +104,11 @@ if(TARGET GLFW::GLFW3)
 elseif(TARGET GlfwFallback)
  set(IW_GLFW_TARGET GlfwFallback)
 else()
+ # Last resort: the bare "glfw" name (linker default search). This only works
+ # if glfw3 sits in a default search dir; on a fresh Mac it usually does not
+ # (it's in /opt/homebrew/lib). Warn so a link failure isn't a mystery.
  set(IW_GLFW_TARGET glfw)
+ message(WARNING "glfw3 found by find_package but no usable library target/path was resolved; falling back to the bare 'glfw' link name. If linking fails, install GLFW (macOS: brew install glfw; Linux: apt install libglfw3-dev).")
 endif()
 
 # SDL2: CMake config, then pkg-config, then raw find_path/find_library
