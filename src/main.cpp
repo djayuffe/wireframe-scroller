@@ -48,14 +48,17 @@ static std::vector<std::filesystem::path> logoCandidates(const std::filesystem::
 }
 
 int main(int argc,char**argv){
-  double bpm=132.0;std::filesystem::path musicPath,logoOverride;bool noScroller=false;
+  double bpm=132.0;std::filesystem::path musicPath,logoOverride;bool noScroller=false,noPost=false;
   bool haveRecipe=false; int recipeArg=0;  // haveRecipe=false -> auto mode
+  double quality=1.0;  // render scale: the HDR target is W*quality x H*quality
   std::string screenshotPath; int maxFrames=0;  // --screenshot PATH / --frames N
   for(int i=1;i<argc;i++){
     std::string arg(argv[i]);
     if(arg=="--bpm"&&i+1<argc)bpm=std::max(1.0,std::atof(argv[++i]));
     else if(arg=="--music"&&i+1<argc)musicPath=argv[++i];
     else if(arg=="--no-scroller")noScroller=true;
+    else if(arg=="--no-post")noPost=true;
+    else if(arg=="--quality"&&i+1<argc)quality=std::clamp(std::atof(argv[++i]),0.25,1.0);
     else if(arg=="--logos"&&i+1<argc)logoOverride=argv[++i];
     else if(arg=="--recipe"&&i+1<argc){recipeArg=std::atoi(argv[++i]);haveRecipe=true;}
     else if(arg=="--version"){std::fprintf(stdout,"Impossible Wireframe v4.25\n");return 0;}
@@ -68,6 +71,9 @@ int main(int argc,char**argv){
         "  --bpm N         Tempo (default 132)\n"
         "  --music PATH    Audio module/wav to play (default: assets/music if present)\n"
         "  --no-scroller   Start with the text marquee off (toggle with T)\n"
+        "  --no-post       Skip the screen-space FX post pass (faster; debugging)\n"
+        "  --quality F     Render the HDR target at F of screen resolution (0.25-1.0,\n"
+        "                  default 1.0; lower = faster on weak GPUs)\n"
         "  --logos DIR     Directory of UBER_*_1920x1080.jpg logo cards\n"
         "  --recipe N      Start in recipe mode with curated recipe N (0-23)\n"
         "  --screenshot P  Save one PNG frame to P (then continue running)\n"
@@ -118,7 +124,9 @@ int main(int argc,char**argv){
      if(std::filesystem::exists(cand/"wire.vert")) shaderDir=cand.string();
     }
    }
-     Renderer r;if(!r.init(w,shaderDir)){std::fprintf(stderr,"Renderer init failed: %s\n",r.error().c_str());audio.close();glfwDestroyWindow(w);glfwTerminate();return 3;}
+      Renderer r;if(!r.init(w,shaderDir)){std::fprintf(stderr,"Renderer init failed: %s\n",r.error().c_str());audio.close();glfwDestroyWindow(w);glfwTerminate();return 3;}
+      r.setRenderScale(float(quality));
+      r.setPostEnabled(!noPost);
     { // Load the UBER fullscreen logo pack as the animated background.
        auto candidates=logoCandidates(logoOverride,exeDir);
        bool loaded=false;
@@ -220,16 +228,23 @@ int main(int argc,char**argv){
         if(rc.stages[k].useSecondary){ secondary=m.v.empty()?nullptr:&scenes.mesh((scene+1)%scenes.count(),showSeconds,seed); break; }
       applyRecipe(m,rc,ec,secondary);
     }
-    auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);if(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig){if(!r.upload(m)){std::fprintf(stderr,"Mesh rejected in scene %d: %s\n",scene,r.error().c_str());break;}lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;}int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=std::max(.1f,geo::stats(m).radius);float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;
+    // geo::stats() scans every vertex + edge to compute the radius; on a dense
+    // scene (the 600-cell projection is ~1200 edges, a subdivided recipe can be
+    // 50k+) it was called TWICE per frame (once for the upload-signature, once
+    // for rad). Compute it once and reuse .radius.
+    auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);if(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig){if(!r.upload(m)){std::fprintf(stderr,"Mesh rejected in scene %d: %s\n",scene,r.error().c_str());break;}lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;}int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=std::max(.1f,st.radius);float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;
       // 1) Wireframe. draw() captures into the HDR FBO (logo backdrop first in
       //    logo mode, wireframe additive on top in both modes).
       if(!r.draw(float(showSeconds),W,H,float(W)/float(H),scene,std::min(1.48f,1.92f/rad)*sizeCycle,1.f+sync.pulse,music.level)){std::fprintf(stderr,"Renderer draw failed: %s\n",r.error().c_str());break;}
       // 2) Traveling objects weaving back and forth through the wireframe
       //    (captured into the same HDR FBO).
       r.drawTravelers(float(showSeconds),W,H,float(W)/float(H),std::min(1.48f,1.92f/rad)*sizeCycle,music.level);
-      // 3) Run the screen-space FX post pass over the captured frame
-      //    (logo+wire+travelers in logo mode, wire+travelers otherwise).
-      r.finishLogoFrame(float(showSeconds),W,H,scene,music.level);
+       // 3) Run the screen-space FX post pass over the captured frame
+       //    (logo+wire+travelers in logo mode, wire+travelers otherwise).
+       //    Pass bpm so the post shader's synthetic beat pulse is tempo-synced.
+       //    With --no-post, the pass still runs (to upscale the scaled HDR target
+       //    to the screen + tone-map) but skips every FX via the uBypass path.
+       r.finishLogoFrame(float(showSeconds),W,H,scene,music.level,float(bpm));
     // Fullscreen beat-synced text marquee: scene name + provenance + effect
     // recipe + BPM. Shown at the bottom of the screen as a news-ticker band.
     if(scrollerOn){

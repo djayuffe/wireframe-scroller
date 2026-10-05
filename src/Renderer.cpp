@@ -18,8 +18,20 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
+// stb_image_write is third-party and trips -Wall -Wextra (missing field
+// initializers, etc.). Silence those for this TU only so CI's -Werror doesn't
+// fail over a vendored header. Our own code below keeps full warnings.
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#endif
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 namespace {std::string readText(const std::string&p){std::ifstream f(p);if(!f)return {};std::ostringstream s;s<<f.rdbuf();return s.str();}
 bool shader(GLuint&out,GLenum type,const std::string&s,std::string&err){out=glCreateShader(type);const char*p=s.c_str();glShaderSource(out,1,&p,nullptr);glCompileShader(out);GLint ok=0;glGetShaderiv(out,GL_COMPILE_STATUS,&ok);if(!ok){GLint n=0;glGetShaderiv(out,GL_INFO_LOG_LENGTH,&n);std::string log(std::max(1,n),'\0');glGetShaderInfoLog(out,n,nullptr,log.data());err=log;glDeleteShader(out);out=0;return false;}return true;}
 GLuint linkProgram(const std::string&vs,const std::string&fs,std::string&err){GLuint v=0,f=0;if(!shader(v,GL_VERTEX_SHADER,vs,err)||!shader(f,GL_FRAGMENT_SHADER,fs,err)){if(v)glDeleteShader(v);if(f)glDeleteShader(f);return 0;}GLuint p=glCreateProgram();glAttachShader(p,v);glAttachShader(p,f);glLinkProgram(p);glDeleteShader(v);glDeleteShader(f);GLint ok=0;glGetProgramiv(p,GL_LINK_STATUS,&ok);if(!ok){GLint n=0;glGetProgramiv(p,GL_INFO_LOG_LENGTH,&n);err.resize(std::max(1,n));glGetProgramInfoLog(p,n,nullptr,err.data());glDeleteProgram(p);return 0;}return p;}
@@ -39,7 +51,7 @@ bool Renderer::createGl(const std::string&dir){
   // carry stale capacities or a stale capture flag from the dead context.
   // First init these are already 0/false.
   edgeCount_=0;vboCapacity_=0;eboCapacity_=0;
-  hdrW_=hdrH_=0;logoCapturePending_=false;hasLogos_=false;
+  hdrW_=hdrH_=0;logoCapturePending_=false;hasLogos_=false;bgLastTime_=-1.0;
   std::string vs=readText(dir+"/wire.vert"),fs=readText(dir+"/wire.frag");
   if(vs.empty()||fs.empty()){error_="cannot read shaders from "+dir;return false;}
   program_=linkProgram(vs,fs,error_);
@@ -130,8 +142,34 @@ bool Renderer::initScroller(const std::string&dir){std::string vs=readText(dir+"
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D,0);
     return true;}
-bool Renderer::initPost(const std::string&dir){std::string vs=readText(dir+"/post.vert"),fs=readText(dir+"/post.frag");if(vs.empty()||fs.empty()){error_="cannot read post shaders from "+dir;return false;}postProgram_=linkProgram(vs,fs,error_);if(!postProgram_)return false;uPostScene_=glGetUniformLocation(postProgram_,"uScene");uPostTime_=glGetUniformLocation(postProgram_,"uTime");uPostResolution_=glGetUniformLocation(postProgram_,"uResolution");uPostMusic_=glGetUniformLocation(postProgram_,"uMusicLevel");uPostHasLogo_=glGetUniformLocation(postProgram_,"uHasLogo");setupFullscreenVao(postVao_,postVbo_);glUseProgram(postProgram_);if(uPostScene_>=0)glUniform1i(uPostScene_,0);return true;}
-bool Renderer::resizeHdr(int width,int height){width=std::max(1,width);height=std::max(1,height);if(width==hdrW_&&height==hdrH_&&hdrFbo_)return true;hdrW_=width;hdrH_=height;if(!hdrFbo_)glGenFramebuffers(1,&hdrFbo_);if(!hdrTex_)glGenTextures(1,&hdrTex_);if(!depthRbo_)glGenRenderbuffers(1,&depthRbo_);glBindTexture(GL_TEXTURE_2D,hdrTex_);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA16F,width,height,0,GL_RGBA,GL_FLOAT,nullptr);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);glBindRenderbuffer(GL_RENDERBUFFER,depthRbo_);glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT24,width,height);glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,hdrTex_,0);glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,depthRbo_);if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE){error_="HDR framebuffer incomplete";glBindFramebuffer(GL_FRAMEBUFFER,0);return false;}glBindFramebuffer(GL_FRAMEBUFFER,0);return true;}
+bool Renderer::initPost(const std::string&dir){std::string vs=readText(dir+"/post.vert"),fs=readText(dir+"/post.frag");if(vs.empty()||fs.empty()){error_="cannot read post shaders from "+dir;return false;}postProgram_=linkProgram(vs,fs,error_);if(!postProgram_)return false;uPostScene_=glGetUniformLocation(postProgram_,"uScene");uPostTime_=glGetUniformLocation(postProgram_,"uTime");uPostResolution_=glGetUniformLocation(postProgram_,"uResolution");uPostMusic_=glGetUniformLocation(postProgram_,"uMusicLevel");uPostBpm_=glGetUniformLocation(postProgram_,"uBpm");uPostBypass_=glGetUniformLocation(postProgram_,"uBypass");uPostHasLogo_=glGetUniformLocation(postProgram_,"uHasLogo");setupFullscreenVao(postVao_,postVbo_);glUseProgram(postProgram_);if(uPostScene_>=0)glUniform1i(uPostScene_,0);return true;}
+bool Renderer::resizeHdr(int width,int height){
+  // Apply the render scale: the HDR target (and everything rendered into it —
+  // the 3D wireframe, travelers, and the post/FX pass) runs at a fraction of
+  // screen resolution on weak GPUs. The post pass upscales to the full-screen
+  // default framebuffer. 1.0 = native.
+  width=std::max(1,(int)std::lround(width*renderScale_));
+  height=std::max(1,(int)std::lround(height*renderScale_));
+  if(width==hdrW_&&height==hdrH_&&hdrFbo_)return true;
+  hdrW_=width;hdrH_=height;
+  if(!hdrFbo_)glGenFramebuffers(1,&hdrFbo_);
+  if(!hdrTex_)glGenTextures(1,&hdrTex_);
+  if(!depthRbo_)glGenRenderbuffers(1,&depthRbo_);
+  glBindTexture(GL_TEXTURE_2D,hdrTex_);
+  glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA16F,width,height,0,GL_RGBA,GL_FLOAT,nullptr);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+  glBindRenderbuffer(GL_RENDERBUFFER,depthRbo_);
+  glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT24,width,height);
+  glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);
+  glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,hdrTex_,0);
+  glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,depthRbo_);
+  if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE){error_="HDR framebuffer incomplete";glBindFramebuffer(GL_FRAMEBUFFER,0);return false;}
+  glBindFramebuffer(GL_FRAMEBUFFER,0);
+  return true;
+}
 bool Renderer::upload(const Mesh3&m){std::string why;if(!geo::validate(m,&why)){error_=why;return false;}std::vector<uint32_t>ix;ix.reserve(m.e.size()*2);for(auto e:m.e){ix.push_back(e.a);ix.push_back(e.b);}edgeCount_=(int)ix.size();glBindVertexArray(vao_);glBindBuffer(GL_ARRAY_BUFFER,vbo_);size_t vb=m.v.size()*sizeof(V3);if(vb>vboCapacity_){vboCapacity_=std::max(vb,vboCapacity_*2+4096);glBufferData(GL_ARRAY_BUFFER,vboCapacity_,nullptr,GL_DYNAMIC_DRAW);}if(vb)glBufferSubData(GL_ARRAY_BUFFER,0,vb,m.v.data());glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(V3),nullptr);glEnableVertexAttribArray(0);glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo_);size_t eb=ix.size()*sizeof(uint32_t);if(eb>eboCapacity_){eboCapacity_=std::max(eb,eboCapacity_*2+4096);glBufferData(GL_ELEMENT_ARRAY_BUFFER,eboCapacity_,nullptr,GL_DYNAMIC_DRAW);}if(eb)glBufferSubData(GL_ELEMENT_ARRAY_BUFFER,0,eb,ix.data());return true;}
 bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,float scale,float lineWidth,float musicLevel){if(!resizeHdr(width,height))return false;float ml=std::clamp(musicLevel,0.f,1.f);
  float fly=std::sin(t*.19f),zoom=std::sin(t*.23f+1.7f),breath=1.f+.075f*std::sin(t*.83f)+.12f*ml;
@@ -146,12 +184,14 @@ bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,flo
     // (opaque, no depth), then the wireframe + travelers render ADDITIVELY on
     // top, so the 3D content glows over the picture. The post/FX pass runs later
     // (finishLogoFrame) over the combined buffer.
-    glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);
-    glViewport(0,0,width,height);
-    glClearColor(0,0,0,1);
-    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-    // 1) Logo backdrop (full-screen, opaque, no depth).
-    drawBackground(t,width,height,sceneIndex,ml,true);
+     glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);
+     // The viewport must match the HDR target size (which is the screen scaled
+     // by renderScale_ for --quality), NOT the full screen.
+     glViewport(0,0,hdrW_,hdrH_);
+     glClearColor(0,0,0,1);
+     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+     // 1) Logo backdrop (full-screen, opaque, no depth).
+     drawBackground(t,hdrW_,hdrH_,sceneIndex,ml,true);
     // 2) Wireframe additive over the logo.
     glEnable(GL_DEPTH_TEST);
     glUseProgram(program_);
@@ -171,7 +211,7 @@ bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,flo
   // No logo: capture the wireframe into the HDR buffer (on a black clear). The
   // post/FX pass is deferred to finishLogoFrame() so the travelers (drawn next)
   // are captured too and get the same post-processing as in logo mode.
-  glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);glViewport(0,0,width,height);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);glEnable(GL_DEPTH_TEST);glUseProgram(program_);glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);glUniform1f(uTime_,t);if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);glLineWidth(std::max(1.f,lineWidth+ml*.75f));glBindVertexArray(vao_);glDrawElements(GL_LINES,edgeCount_,GL_UNSIGNED_INT,nullptr);glDisable(GL_DEPTH_TEST);
+  glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);glViewport(0,0,hdrW_,hdrH_);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);glEnable(GL_DEPTH_TEST);glUseProgram(program_);glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);glUniform1f(uTime_,t);if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);glLineWidth(std::max(1.f,lineWidth+ml*.75f));glBindVertexArray(vao_);glDrawElements(GL_LINES,edgeCount_,GL_UNSIGNED_INT,nullptr);glDisable(GL_DEPTH_TEST);
   logoCapturePending_=true;
   return true;}
 bool Renderer::loadLogos(const std::string&dir){
@@ -212,14 +252,20 @@ bool Renderer::drawBackground(float time,int width,int height,int sceneIndex,flo
     bgMix_=0.f;
     bgTarget_=target;
   }
-  // Advance the crossfade; when done, promote B -> A.
+  // Advance the crossfade; when done, promote B -> A. The fade advances at a
+  // fixed RATE (per second), not per frame, so a 144 Hz monitor crossfades at
+  // the same wall-clock speed as 60 Hz. (The old code did bgMix_+=0.03 per
+  // frame, which was 2.4x faster on 144 Hz.) dt is clamped so a long stall
+  // (e.g. window iconified) doesn't jump the fade to completion.
   if(bgTarget_!=bgCurrent_){
-    bgMix_=std::min(1.f,bgMix_+0.03f);
+    double dt=bgLastTime_<0.0?0.0:std::max(0.0,std::min(0.1,(time-bgLastTime_)));
+    bgMix_=std::min(1.f,bgMix_+float(dt*3.0f));   // full fade in ~1/3 s
     if(bgMix_>=1.f){ bgTexA_=bgTexB_; bgCurrent_=bgTarget_; bgMix_=0.f; }
   } else {
     bgMix_=0.f;
     if(!bgTexB_||bgTexB_==0) bgTexB_=bgTexA_;
   }
+  bgLastTime_=time;
   if(!bgTexA_) bgTexA_=logos_[0].tex;
   if(!bgTexB_) bgTexB_=logos_[0].tex;
   // Ken Burns: slow zoom in/out.
@@ -289,7 +335,7 @@ bool Renderer::drawTravelers(float time,int width,int height,float aspect,float 
   if(hasLogos_)glDisable(GL_BLEND);
   return true;
 }
-bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,float musicLevel){
+bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,float musicLevel,float bpm){
   (void)sceneIndex;
   if(!logoCapturePending_)return false;
   logoCapturePending_=false;
@@ -305,6 +351,8 @@ bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,fl
   if(uPostTime_>=0)glUniform1f(uPostTime_,time);
   if(uPostResolution_>=0)glUniform2f(uPostResolution_,float(width),float(height));
   if(uPostMusic_>=0)glUniform1f(uPostMusic_,std::clamp(musicLevel,0.f,1.f));
+  if(uPostBpm_>=0)glUniform1f(uPostBpm_,bpm);
+  if(uPostBypass_>=0)glUniform1f(uPostBypass_,postEnabled_?0.f:1.f);
   if(uPostHasLogo_>=0)glUniform1f(uPostHasLogo_,hasLogos_?1.f:0.f);
   glBindVertexArray(postVao_);
   glDrawArrays(GL_TRIANGLES,0,3);

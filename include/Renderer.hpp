@@ -1,5 +1,6 @@
 #pragma once
 #include "Geometry.hpp"
+#include <algorithm>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -21,9 +22,10 @@ public:
    bool drawBackground(float time,int width,int height,int sceneIndex,float musicLevel=0.f,bool logoComposite=false);
    // Draw the traveling objects moving back and forth through the wireframe.
    bool drawTravelers(float time,int width,int height,float aspect,float scale,float musicLevel=0.f);
-   // Logo mode: composite the fullscreen logo over the captured wireframe frame
-   // and run the post/FX pass. Called after drawTravelers in the logo path.
-    bool finishLogoFrame(float time,int width,int height,int sceneIndex,float musicLevel=0.f);
+    // Logo mode: composite the fullscreen logo over the captured wireframe frame
+    // and run the post/FX pass. Called after drawTravelers in the logo path.
+    // bpm syncs the synthetic beat pulse in the post shader to the real tempo.
+     bool finishLogoFrame(float time,int width,int height,int sceneIndex,float musicLevel=0.f,float bpm=132.f);
     // Re-create all GL objects after a context loss (GPU reset / driver crash).
     // The caller has already re-makethe-context-current; this just rebuilds
     // programs, VAOs, buffers, textures, and the HDR FBO. Logo textures are
@@ -34,8 +36,17 @@ public:
     // Used for headless/automated visual verification. Returns false (with
     // error_ set) on GL or write failure.
     bool screenshot(const std::string& path,int width,int height);
-    void shutdown();
-   const std::string& error() const { return error_; }
+  void shutdown();
+   // Render the HDR target (3D wireframe + travelers + post/FX) at a fraction of
+   // the screen resolution to ease GPU load on weak hardware. The post pass then
+   // upscales to the full-screen default framebuffer. 1.0 = native (default).
+   void setRenderScale(float s) { renderScale_ = std::clamp(s, 0.25f, 1.0f); }
+   float renderScale() const { return renderScale_; }
+   // When true, the screen-space FX post pass is skipped entirely: the captured
+   // HDR frame is blitted straight to the screen. Faster, useful for debugging.
+   void setPostEnabled(bool on) { postEnabled_ = on; }
+   bool postEnabled() const { return postEnabled_; }
+    const std::string& error() const { return error_; }
  private:
   bool createGl(const std::string& shaderDir);
   bool initPost(const std::string& shaderDir);
@@ -44,16 +55,17 @@ public:
   bool initBackground(const std::string& shaderDir);
   bool initTravelers(const std::string& shaderDir);
   unsigned vao_=0,vbo_=0,ebo_=0,program_=0,postProgram_=0,postVao_=0,postVbo_=0,hdrFbo_=0,hdrTex_=0,depthRbo_=0,scrollerProgram_=0,scrollerVao_=0,scrollerVbo_=0,bgProgram_=0,bgVao_=0,bgVbo_=0,bgTexA_=0,bgTexB_=0,travelerProgram_=0,travelerVao_=0,travelerVbo_=0,travelerEbo_=0; int edgeCount_=0,hdrW_=0,hdrH_=0;
-  size_t vboCapacity_=0,eboCapacity_=0;    int uMVP_=-1,uTime_=-1,uColor_=-1,uMusicLevel_=-1,uPostScene_=-1,uPostTime_=-1,uPostResolution_=-1,uPostMusic_=-1,uPostHasLogo_=-1;
+  size_t vboCapacity_=0,eboCapacity_=0;    int uMVP_=-1,uTime_=-1,uColor_=-1,uMusicLevel_=-1,uPostScene_=-1,uPostTime_=-1,uPostResolution_=-1,uPostMusic_=-1,uPostBpm_=-1,uPostBypass_=-1,uPostHasLogo_=-1;
    int uScTime_=-1,uScPhase_=-1,uScRes_=-1,uScMusic_=-1,uScOffset_=-1,uScTextWidth_=-1,uScFont_=-1,uScCodes_=-1,uScCount_=-1,uScOpacity_=-1;
    unsigned scrollerFontTex_=0,scrollerCodesTex_=0; int travelerEdgeCount_=0;
   int uBgMix_=-1,uBgZoom_=-1,uBgAspect_=-1,uBgTexAspect_=-1,uBgOp_=-1,uBgTime_=-1,uBgMusic_=-1,uBgTexA_=-1,uBgTexB_=-1;
    int uTrMVP_=-1,uTrTime_=-1,uTrColor_=-1,uTrSpeed_=-1;
-    bool hasLogos_=false; bool logoCapturePending_=false;
-   std::string error_;
+    bool hasLogos_=false; bool logoCapturePending_=false; float renderScale_=1.f; bool postEnabled_=true;
+    std::string error_;
   struct Logo { unsigned tex=0; int w=0,h=0; };
   std::vector<Logo> logos_;
-  int bgCurrent_=-1;           // logo index currently shown in slot A
-  int bgTarget_=-1;            // logo index fading in (slot B)
-  float bgMix_=0.f;            // 0=A, 1=B
+   int bgCurrent_=-1;           // logo index currently shown in slot A
+   int bgTarget_=-1;            // logo index fading in (slot B)
+   float bgMix_=0.f;            // 0=A, 1=B
+   double bgLastTime_=-1.0;     // last drawBackground time (for frame-rate-independent fade)
 };

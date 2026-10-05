@@ -251,6 +251,17 @@ int main(){
       // the scroller shader must use the GLSL `mod` builtin for bit extraction
       { std::ifstream f(shadersDir/"scroller.frag"); std::string all((std::istreambuf_iterator<char>(f)),std::istreambuf_iterator<char>());
         req(all.find("mod(floor(v / pow(2.0, bit)), 2.0)")!=std::string::npos,"scroller uses GLSL mod builtin"); }
+      // post.frag must be tempo-synced: the synthetic beat pulse must be driven
+      // by uBpm (bpm/60 Hz), NOT a hard-coded 3.2 Hz. A regression that re-introduces
+      // a fixed frequency would make the FX pulse at the wrong rate for --bpm != 192.
+      { std::ifstream f(shadersDir/"post.frag"); std::string all((std::istreambuf_iterator<char>(f)),std::istreambuf_iterator<char>());
+        req(all.find("uBpm")!=std::string::npos,"post.frag declares uBpm");
+        req(all.find("uBpm/60.0")!=std::string::npos,"post.frag beat synced to bpm/60 Hz");
+        // the old hard-coded 3.2 Hz (192 BPM only) must be gone from the beat line
+        req(all.find("sin(uTime*3.2)")==std::string::npos,"post.frag no hard-coded 3.2 Hz beat");
+        // --no-post bypass path must exist (ACES tone-map + early return)
+        req(all.find("uBypass")!=std::string::npos,"post.frag declares uBypass");
+      }
     }
     std::cout<<"geometry_tests: PASS; exact 120-cell V="<<c120.v.size()<<" E="<<c120.e.size()<<"\n";
  }

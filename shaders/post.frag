@@ -5,9 +5,17 @@ uniform sampler2D uScene;
 uniform vec2 uResolution;
 uniform float uTime;
 uniform float uMusicLevel;
+// Tempo in beats per minute. The synthetic beat pulse below is synced to this
+// so the FX pulse at, e.g., --bpm 100 actually pulses at 100 BPM (100/60 Hz)
+// instead of a hard-coded 3.2 Hz (192 BPM) that only matches 192 BPM.
+uniform float uBpm;
 // 1.0 when a logo backdrop is in uScene (logo mode): skip the procedural
 // background and reduce the scene gain so the logo isn't washed out.
 uniform float uHasLogo;
+// --no-post: skip the whole FX chain. Just tone-map the captured HDR buffer and
+// output it (the 3D + logo are still composited; only the screen-space FX,
+// procedural background, and grain are skipped). This is the fast/debug path.
+uniform float uBypass;
 
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}
 float hash21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}
@@ -27,9 +35,22 @@ float tunnelLayer(vec2 p,float z,float twist){
 }
 
 void main(){
+  // --no-post fast path: sample the captured frame, ACES tone-map it (the buffer
+  // is HDR float, so it needs SOME tone map to be visible), output. Skips every
+  // FX (no UV warps, no procedural background, no grain, no bloom taps).
+  if(uBypass>.5){
+    vec3 c=texture(uScene,uv).rgb;
+    FragColor=vec4(pow(aces(c*1.25),vec3(.4545)),1.0);
+    return;
+  }
   vec2 px=1.0/max(uResolution,vec2(1));
   vec2 p=(uv*2.-1.)*vec2(uResolution.x/max(uResolution.y,1.),1.);
-  float beat=pow(.5+.5*sin(uTime*3.2),14.0);          // synthetic 3.2 Hz pulse
+  // Synthetic beat pulse, synced to the real tempo (uBpm beats/min). The old
+  // hard-coded uTime*3.2 (192 BPM) only matched 192 BPM; at --bpm 132 the FX
+  // pulsed ~45% too fast. beatHz = bpm/60, and a 14th-power sine gives the same
+  // sharp downbeat spike shape the original had.
+  float beatHz=uBpm/60.0;
+  float beat=pow(.5+.5*sin(6.2831853*uTime*beatHz),14.0);
   float mlev=uMusicLevel;
   // 1.0 when a logo backdrop is in uScene (logo mode): the logo is a real
   // 0-1 picture, so screen-space UV warps (lensing/shockwave/barrel/CA) would

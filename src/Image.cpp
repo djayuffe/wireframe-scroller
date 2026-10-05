@@ -1,6 +1,21 @@
+// The stb_image implementation is third-party and trips -Wall -Wextra (missing
+// field initializers, unused params, sign compares, …). Silence those for this
+// TU only so CI's -Werror (IW_WARNINGS_AS_ERRORS) doesn't fail over a vendored
+// header. Our own code below still compiles with full warnings.
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+#endif
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #undef STB_IMAGE_IMPLEMENTATION
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 #include "Image.hpp"
 #include <algorithm>
 #include <filesystem>

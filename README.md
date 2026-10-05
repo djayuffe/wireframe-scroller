@@ -89,9 +89,16 @@ If OpenGL/GLFW are absent, CMake still builds `iw_geometry` and `geometry_tests`
 - Up / Down: in recipe mode, cycle the 24 curated effect recipes
 - P: re-roll the mutation seed (new procedural variant for the current scene)
 - Escape: quit
-- `--bpm N`: synchronization tempo (default 132)
+- `--bpm N`: synchronization tempo (default 132) — also syncs the post-pass beat pulse
 - `--no-scroller`: start with the text marquee off (toggle back on with T)
 - `--recipe N`: start in recipe mode with curated recipe N (0–23)
+- `--quality F`: render the HDR target (3D + post/FX) at F of screen resolution
+  (0.25–1.0, default 1.0). Lower values are much faster on weak GPUs; the result
+  is upscaled to the window. e.g. `--quality 0.5` renders at half resolution.
+- `--no-post`: skip the screen-space FX (lensing, shockwave, glitch, grain,
+  procedural background, …). The 3D wireframe + logo + travelers are still
+  composited and tone-mapped; only the Uber-compositor effects are skipped.
+  Useful for debugging and for maximum frame rate.
 
 ## Visual layers
 The renderer composites four layers, back to front:
