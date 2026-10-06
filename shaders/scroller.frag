@@ -25,7 +25,12 @@ float fontPix(float g, float x, float y){
   float idx = g*7.0 + y;
   float bit = 4.0 - x;                 // MSB = leftmost column
   // 1x665 texture: u = (idx+0.5)/665, v = 0.5 (the single row).
-  float v = texture(uFont, vec2((idx + 0.5)/665.0, 0.5)).r;
+  // The GL_R8 read-back is the stored byte NORMALIZED to [0,1] (b -> b/255),
+  // so scale it back to 0..255 and round before bit extraction. (The old code
+  // divided the normalized float by 2^bit directly — since the float is < 1 and
+  // 2^bit >= 1, floor() collapsed every bit except (sometimes) bit 0, corrupting
+  // ~all glyph pixels. Same class of bug as the uCodes *255 fix.)
+  float v = round(texture(uFont, vec2((idx + 0.5)/665.0, 0.5)).r * 255.0);
   // Extract bit `bit` of byte v: (v >> bit) & 1  ==  floor(v/2^bit) mod 2.
   // (GLSL built-in is `mod`, not C's `fmod` — Apple's stricter compiler rejects fmod.)
   return mod(floor(v / pow(2.0, bit)), 2.0);

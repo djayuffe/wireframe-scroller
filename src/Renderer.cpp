@@ -194,10 +194,10 @@ bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,flo
      drawBackground(t,hdrW_,hdrH_,sceneIndex,ml,true);
     // 2) Wireframe additive over the logo.
     glEnable(GL_DEPTH_TEST);
-    glUseProgram(program_);
-    glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);
-    glUniform1f(uTime_,t);
-    if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);
+     glUseProgram(program_);
+     glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);
+     if(uTime_>=0)glUniform1f(uTime_,t);
+     if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);
     glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);
     glLineWidth(std::max(1.f,lineWidth+ml*.75f));
     glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);glBlendEquation(GL_FUNC_ADD);
@@ -211,7 +211,7 @@ bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,flo
   // No logo: capture the wireframe into the HDR buffer (on a black clear). The
   // post/FX pass is deferred to finishLogoFrame() so the travelers (drawn next)
   // are captured too and get the same post-processing as in logo mode.
-   glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);glViewport(0,0,hdrW_,hdrH_);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);glEnable(GL_DEPTH_TEST);glUseProgram(program_);glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);glUniform1f(uTime_,t);if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);glLineWidth(std::max(1.f,lineWidth+ml*.75f));glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);glBlendEquation(GL_FUNC_ADD);glBindVertexArray(vao_);glDrawElements(GL_LINES,edgeCount_,GL_UNSIGNED_INT,nullptr);glDisable(GL_BLEND);glDisable(GL_DEPTH_TEST);
+   glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);glViewport(0,0,hdrW_,hdrH_);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);glEnable(GL_DEPTH_TEST);glUseProgram(program_);glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);if(uTime_>=0)glUniform1f(uTime_,t);if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);glLineWidth(std::max(1.f,lineWidth+ml*.75f));glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);glBlendEquation(GL_FUNC_ADD);glBindVertexArray(vao_);glDrawElements(GL_LINES,edgeCount_,GL_UNSIGNED_INT,nullptr);glDisable(GL_BLEND);glDisable(GL_DEPTH_TEST);
    logoCapturePending_=true;
    return true;}
 bool Renderer::loadLogos(const std::string&dir){
@@ -329,10 +329,14 @@ bool Renderer::drawTravelers(float time,int width,int height,float aspect,float 
    // In logo mode the travelers are captured into the HDR buffer (additive) so
    // the post/FX pass sees them. In no-logo mode they also capture to the HDR
    // buffer (the post pass runs AFTER travelers, not inside draw()).
-   glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);
-  glEnable(GL_DEPTH_TEST);
-  glUseProgram(travelerProgram_);
-   if(uTrMVP_>=0)glUniformMatrix4fv(uTrMVP_,1,GL_FALSE,M);
+    glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);
+    // The viewport is inherited from draw() (which set it to hdrW_ x hdrH_), but
+    // state it EXPLICITLY here so this dependency isn't fragile — if draw() ever
+    // changed its viewport, the travelers would silently render at the wrong scale.
+    glViewport(0,0,hdrW_,hdrH_);
+   glEnable(GL_DEPTH_TEST);
+   glUseProgram(travelerProgram_);
+    if(uTrMVP_>=0)glUniformMatrix4fv(uTrMVP_,1,GL_FALSE,M);
    if(uTrTime_>=0)glUniform1f(uTrTime_,time);
    if(uTrSpeed_>=0)glUniform1f(uTrSpeed_,0.85f);
    if(uTrColor_>=0)glUniform3f(uTrColor_,1.0f,0.9f,1.2f);

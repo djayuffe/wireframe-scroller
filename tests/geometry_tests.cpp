@@ -75,12 +75,23 @@ int main(){
   // Scroller font decode: the EXACT bit math the GLSL shader uses must match
   // the raw glyph bits for every (glyph, x, y) - a regression guard so the
   // marquee can't silently render blank again.
-  { auto g=textfont::glyphs();int mism=0;
+  // The font row byte is stored in a 1x665 GL_R8 texture, which NORMALIZES it
+  // to [0,1] on read-back (b -> b/255). scroller.frag's fontPix() must scale it
+  // back (round(r*255)) before bit extraction. The OLD test used the raw byte
+  // (int v=row) and short-circuited the normalize->scale->round path, so it
+  // never caught the bug where dividing the normalized float by 2^bit collapsed
+  // almost every bit to 0 (255 of 256 byte values mis-extracted >=1 bit).
+  { auto g=textfont::glyphs();
+   int cells=0;
    for(int gi=0;gi<textfont::glyphCount();gi++)for(int y=0;y<7;y++)for(int x=0;x<5;x++){
-     unsigned char row=g[gi].rows[y];int bit=4-x;int expected=(row>>bit)&1;
-     int v=row;double b=std::fmod(std::floor(v/std::pow(2.0,bit)),2.0);
-     int got=(b>0.5)?1:0;if(got!=expected)mism++;}
-   req(mism==0,"scroller font decode matches glyph bits");
+      unsigned char row=g[gi].rows[y];int bit=4-x;int expected=(row>>bit)&1;
+      // Model the REAL GPU path: GL_R8 read-back normalizes, shader scales back.
+      float r=(float)((double)row/255.0);            // GL_R8 read-back
+      float v=std::round(r*255.0f);                   // scroller.frag: round(r*255)
+      double b=std::fmod(std::floor(v/std::pow(2.0,bit)),2.0);  // fontPix bit extract
+      int got=(b>0.5)?1:0;cells++;
+      if(got!=expected){char m[96];std::snprintf(m,sizeof m,"font decode glyph %d row %d x %d: got %d want %d",gi,y,x,got,expected);req(false,m);}}
+   req(cells==textfont::glyphCount()*7*5,"scroller font decode covers every (glyph,row,col)");
    // a few known glyphs must be non-blank
    auto lit=[&](char c){int n=0;for(int y=0;y<7;y++)for(int x=0;x<5;x++)if((g[c-32].rows[y]>>(4-x))&1)n++;return n;};
     req(lit('A')>0&&lit('M')>0&&lit('0')>0,"scroller glyphs non-blank");
@@ -138,6 +149,15 @@ int main(){
      }
   // Image: decode + discovery (uses the repo's UBER logo pack when present)
   { Image miss;req(!Image::loadFromFile("/nonexistent/xyz.jpg",miss),"load missing -> false");
+    // empty() contract: the OOB guard in loadFromFile relies on w>0 && h>0. A
+    // zero- or negative-dimension decode must be reported empty (and is rejected
+    // before the byte count is computed, so a corrupt header claiming w=0 or a
+    // huge negative can't drive rgba.assign(px, px+huge) past the allocation).
+    { Image z0; z0.w=0; z0.h=1080; req(z0.empty(),"Image::empty w=0");
+      Image z1; z1.w=1920; z1.h=0; req(z1.empty(),"Image::empty h=0");
+      Image zn; zn.w=-4; zn.h=1080; req(zn.empty(),"Image::empty w<0");
+      Image ok; ok.w=4; ok.h=4; ok.rgba.resize(64); req(!ok.empty(),"Image::empty valid");
+      Image noRgba; noRgba.w=4; noRgba.h=4; req(noRgba.empty(),"Image::empty no rgba"); }
     // Logo pack path: injected by CMake (IW_TEST_LOGO_PACK) so the test runs
     // on every platform; falls back to the dev-machine path if unset.
 #ifdef IW_TEST_LOGO_PACK

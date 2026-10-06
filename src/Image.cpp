@@ -27,6 +27,11 @@ bool Image::loadFromFile(const std::string& path,Image& out){
   int ch=0;
   uint8_t* px=stbi_load(p.string().c_str(),&out.w,&out.h,&ch,4);
   if(!px) return false;
+  // Guard: stbi_load can return a non-null pointer with w or h == 0 (a degenerate
+  // but decodable image) — or, on a corrupt header, a huge negative, which would
+  // make n = w*h*4 a massive size_t and rgba.assign(px, px+n) read far past the
+  // allocation (OOB). Require positive dims before computing the byte count.
+  if(out.w<=0||out.h<=0){ stbi_image_free(px); return false; }
   size_t n=(size_t)out.w*out.h*4;
   out.rgba.assign(px,px+n);
   stbi_image_free(px);
