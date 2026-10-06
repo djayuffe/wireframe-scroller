@@ -7,6 +7,7 @@ out vec4 FragColor;
 uniform float uTime;
 uniform vec3 uColor;
 uniform float uMusicLevel;
+uniform float uGain;   // density compensation for additive blending (C++: wireGainFor)
 
 vec3 palette(float t){
   return .50+.50*cos(6.2831853*(vec3(.03,.31,.62)+t));
@@ -43,5 +44,5 @@ void main(){
   vec3 color=(base+electric)*pulse*vDepth*(.62+rim*.55);
   color+=vec3(.12,.34,1.0)*matrixB*music*.75;
 
-  FragColor=vec4(color,1.0);
+  FragColor=vec4(color*uGain,1.0);
 }

@@ -19,11 +19,19 @@ vec2 coverUv(vec2 uv, float texAR, float scrAR){
   return (uv-0.5)*c+0.5;
 }
 void main(){
-  float zoom=1.0/uZoom;                 // zoom in
+  // Zoom IN: dividing by uZoom shrinks the sampled region. (The old code multiplied by uZoom, which
+  // sampled MORE than the image and smeared its clamped edges into grey side bars.) kLogoFill crops
+  // the card's blurred margin so the UBER banner fills the window: the letters span about 75% of the
+  // card width and the banner about 67% of its height, so 1.14 (plus the 1.01-1.09 Ken Burns drift) keeps every letter in view.
+  const float kLogoFill=1.14;
+  float zoom=uZoom*kLogoFill;
   vec2 a=(uv-0.5)/zoom+0.5;
   vec2 b=(uv-0.5)/zoom+0.5;
   vec2 ua=coverUv(a,uTexAspect.x/uTexAspect.y,uAspect);
   vec2 ub=coverUv(b,uTexAspect.x/uTexAspect.y,uAspect);
+  // Image rows are uploaded top-first but GL's texture origin is the bottom-left: flip V or the logo
+  // is drawn upside-down.
+  ua.y=1.0-ua.y; ub.y=1.0-ub.y;
   vec3 col=mix(texture(uTexA,ua).rgb,texture(uTexB,ub).rgb,clamp(uMix,0.0,1.0));
   // gentle brightness breathing with the beat.
   col*=0.92+0.08*clamp(uMusicLevel,0.0,1.0)+0.02*sin(uTime*0.5);

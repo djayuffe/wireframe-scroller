@@ -173,31 +173,11 @@ int main(int argc,char**argv){
     bool recipeMode=haveRecipe, prevF=false, prevP=false; int recipeChoice=haveRecipe?recipeArg:0; uint32_t baseSeed=0x50454646ull;
     std::string lastRecipeName;  // recipe/effect name shown in the scroller
          while(!glfwWindowShouldClose(w) && !g_shutdown.load()){
-    // A GPU reset / driver crash flips the context to lost; GLFW reports it
-    // once. Recover by re-makethe-context-current + re-creating all GL objects
-    // (reinit) + re-loading the logo textures. If recovery fails, exit cleanly.
-    // GLFW_CONTEXT_LOST = 0x00020001 (not declared because we use
-    // GLFW_INCLUDE_NONE, so GLFW's header doesn't pull in the GL constants).
-    if(glfwGetWindowAttrib(w,0x00020001 /*GLFW_CONTEXT_LOST*/)){
-      std::fprintf(stderr,"GL context lost (GPU reset/driver crash); attempting recovery\n");
-      bool recovered=false;
-      // GLFW 3: glfwMakeContextCurrent returns void; check glfwGetError after.
-      // (Some 3.x builds take a const char** for the description string.)
-      const char* desc=nullptr;
-      glfwMakeContextCurrent(w);
-      if(glfwGetError(&desc)==GLFW_NO_ERROR && r.reinit(shaderDir)){
-        // Re-load logo textures (the image data is still on disk; only the GL
-        // textures were lost). logoCandidates() re-derives the search list.
-        for(auto& c:logoCandidates(logoOverride,exeDir)){ if(r.loadLogos(c.string())){ recovered=true; break; } }
-        // Invalidate the mesh cache so the next frame re-uploads into the
-        // fresh VBO (the old buffer was destroyed with the context). Without
-        // this, lastMeshSig still matches and the new (empty) VBO is drawn.
-        lastMesh=nullptr;lastUploadScene=-1;lastMeshSig=std::make_tuple(0,0,-1.f);
-      }
-      if(!recovered){ std::fprintf(stderr,"context recovery failed; exiting\n"); break; }
-      std::fprintf(stderr,"GL context recovered\n");
-      continue;
-    }
+    // Note: GLFW offers no portable "context lost" query. This block used to test window attribute
+    // 0x00020001 as GLFW_CONTEXT_LOST, but that value is GLFW_FOCUSED, so every frame of a focused
+    // window was treated as a GPU reset: all GL objects were rebuilt and the frame skipped, which made
+    // the demo crawl. Real robustness (GL_ARB_robustness / glGetGraphicsResetStatus) is not available
+    // in macOS's OpenGL 4.1, so there is deliberately no reset handling here.
     // Iconified (minimized) windows have no visible framebuffer; rendering is
     // wasted work and on some drivers a no-op that can spam errors. Skip the
     // frame and wait for the window to be restored.

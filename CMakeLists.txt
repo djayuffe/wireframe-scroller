@@ -93,10 +93,15 @@ find_package(PkgConfig QUIET)
 # to the bare name (linker default search) as a last resort.
 if(glfw3_FOUND AND NOT TARGET GLFW::GLFW3)
  find_path(GLFW_INCLUDE_DIR GLFW/glfw3.h HINTS ${IW_SEARCH_INC})
- find_library(GLFW_LIBRARY NAMES glfw3 glfw HINTS ${IW_SEARCH_LIB})
+ # Prefer the shared library (glfw): Homebrew also ships a static libglfw3.a, which would need
+ # the Cocoa/IOKit/CoreFoundation frameworks (and the Objective-C runtime) added by hand.
+ find_library(GLFW_LIBRARY NAMES glfw glfw3 HINTS ${IW_SEARCH_LIB})
  if(GLFW_INCLUDE_DIR AND GLFW_LIBRARY)
   add_library(GlfwFallback UNKNOWN IMPORTED)
   set_target_properties(GlfwFallback PROPERTIES IMPORTED_LOCATION "${GLFW_LIBRARY}" INTERFACE_INCLUDE_DIRECTORIES "${GLFW_INCLUDE_DIR}")
+  if(APPLE AND GLFW_LIBRARY MATCHES "\\.a$")
+   set_property(TARGET GlfwFallback PROPERTY INTERFACE_LINK_LIBRARIES "-framework Cocoa" "-framework IOKit" "-framework CoreFoundation")
+  endif()
  endif()
 endif()
 if(TARGET GLFW::GLFW3)

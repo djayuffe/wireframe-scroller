@@ -57,7 +57,7 @@ bool Renderer::createGl(const std::string&dir){
   program_=linkProgram(vs,fs,error_);
   if(!program_)return false;
   uMVP_=glGetUniformLocation(program_,"uMVP");uTime_=glGetUniformLocation(program_,"uTime");
-  uColor_=glGetUniformLocation(program_,"uColor");uMusicLevel_=glGetUniformLocation(program_,"uMusicLevel");
+  uColor_=glGetUniformLocation(program_,"uColor");uGain_=glGetUniformLocation(program_,"uGain");uMusicLevel_=glGetUniformLocation(program_,"uMusicLevel");
   glGenVertexArrays(1,&vao_);glGenBuffers(1,&vbo_);glGenBuffers(1,&ebo_);
   if(!initPost(dir))return false;
   // Non-fatal extras: scroller, logo background, traveling objects. A missing
@@ -170,6 +170,13 @@ bool Renderer::resizeHdr(int width,int height){
   glBindFramebuffer(GL_FRAMEBUFFER,0);
   return true;
 }
+// Additive lines pile up: the 600-cell projection draws ~1200 edges through the same pixels and
+// burns out to white, while a sparse scene needs the full strength. Scale each line by the square
+// root of the density (about constant total energy) and never brighten above 1.
+static float wireGainFor(int indexCount){
+  float lines=float(std::max(1,indexCount/2));
+  return std::clamp(0.80f*std::sqrt(500.f/lines),0.28f,1.0f);
+}
 bool Renderer::upload(const Mesh3&m){std::string why;if(!geo::validate(m,&why)){error_=why;return false;}std::vector<uint32_t>ix;ix.reserve(m.e.size()*2);for(auto e:m.e){ix.push_back(e.a);ix.push_back(e.b);}edgeCount_=(int)ix.size();glBindVertexArray(vao_);glBindBuffer(GL_ARRAY_BUFFER,vbo_);size_t vb=m.v.size()*sizeof(V3);if(vb>vboCapacity_){vboCapacity_=std::max(vb,vboCapacity_*2+4096);glBufferData(GL_ARRAY_BUFFER,vboCapacity_,nullptr,GL_DYNAMIC_DRAW);}if(vb)glBufferSubData(GL_ARRAY_BUFFER,0,vb,m.v.data());glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(V3),nullptr);glEnableVertexAttribArray(0);glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo_);size_t eb=ix.size()*sizeof(uint32_t);if(eb>eboCapacity_){eboCapacity_=std::max(eb,eboCapacity_*2+4096);glBufferData(GL_ELEMENT_ARRAY_BUFFER,eboCapacity_,nullptr,GL_DYNAMIC_DRAW);}if(eb)glBufferSubData(GL_ELEMENT_ARRAY_BUFFER,0,eb,ix.data());return true;}
 bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,float scale,float lineWidth,float musicLevel){if(!resizeHdr(width,height))return false;float ml=std::clamp(musicLevel,0.f,1.f);
  float fly=std::sin(t*.19f),zoom=std::sin(t*.23f+1.7f),breath=1.f+.075f*std::sin(t*.83f)+.12f*ml;
@@ -198,7 +205,7 @@ bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,flo
      glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);
      if(uTime_>=0)glUniform1f(uTime_,t);
      if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);
-    glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);
+    glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);if(uGain_>=0)glUniform1f(uGain_,wireGainFor(edgeCount_));
     glLineWidth(std::max(1.f,lineWidth+ml*.75f));
     glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);glBlendEquation(GL_FUNC_ADD);
     glBindVertexArray(vao_);
@@ -211,7 +218,7 @@ bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,flo
   // No logo: capture the wireframe into the HDR buffer (on a black clear). The
   // post/FX pass is deferred to finishLogoFrame() so the travelers (drawn next)
   // are captured too and get the same post-processing as in logo mode.
-   glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);glViewport(0,0,hdrW_,hdrH_);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);glEnable(GL_DEPTH_TEST);glUseProgram(program_);glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);if(uTime_>=0)glUniform1f(uTime_,t);if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);glLineWidth(std::max(1.f,lineWidth+ml*.75f));glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);glBlendEquation(GL_FUNC_ADD);glBindVertexArray(vao_);glDrawElements(GL_LINES,edgeCount_,GL_UNSIGNED_INT,nullptr);glDisable(GL_BLEND);glDisable(GL_DEPTH_TEST);
+   glBindFramebuffer(GL_FRAMEBUFFER,hdrFbo_);glViewport(0,0,hdrW_,hdrH_);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);glEnable(GL_DEPTH_TEST);glUseProgram(program_);glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);if(uTime_>=0)glUniform1f(uTime_,t);if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);if(uGain_>=0)glUniform1f(uGain_,wireGainFor(edgeCount_));glLineWidth(std::max(1.f,lineWidth+ml*.75f));glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);glBlendEquation(GL_FUNC_ADD);glBindVertexArray(vao_);glDrawElements(GL_LINES,edgeCount_,GL_UNSIGNED_INT,nullptr);glDisable(GL_BLEND);glDisable(GL_DEPTH_TEST);
    logoCapturePending_=true;
    return true;}
 bool Renderer::loadLogos(const std::string&dir){
@@ -384,6 +391,9 @@ bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,fl
    glBindFramebuffer(GL_FRAMEBUFFER,0);
    glPixelStorei(GL_PACK_ALIGNMENT,1);
    glReadBuffer(GL_BACK);  // void in core GL; ensures we read the back buffer
+   // glGetError is sticky: an error left by an earlier call (for example glLineWidth > 1 is invalid
+   // in a macOS core profile) would otherwise be blamed on glReadPixels. Clear it first.
+   while(glGetError()!=GL_NONE){}
    glReadPixels(0,0,width,height,GL_RGB,GL_UNSIGNED_BYTE,px.data());
    if(glGetError()!=GL_NONE){
      error_="glReadPixels failed";return false;
@@ -413,7 +423,7 @@ bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,fl
     std::vector<uint8_t> codes((size_t)n);
     for(int i=0;i<n;++i)codes[i]=(uint8_t)text[i];
     // The code strip is a small 1xN GL_R8 texture (one byte per character).
-    // Allocate immutable storage ONCE at a fixed cap (512 chars — far more than
+    // Allocate the storage ONCE at a fixed cap (512 chars — far more than
     // any marquee string) and update it per frame with glTexSubImage2D. The old
     // code did a full glTexImage2D every frame, which re-allocated GPU memory
     // each frame (a needless hitch). glTexSubImage2D updates in place.
@@ -424,7 +434,8 @@ bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,fl
     if(scrollerCodesTexW_<kMaxCodes){
       scrollerCodesTexW_=kMaxCodes;
       glPixelStorei(GL_UNPACK_ALIGNMENT,1);
-      glTexStorage2D(GL_TEXTURE_2D,1,GL_R8,kMaxCodes,1);
+      // glTexStorage2D is OpenGL 4.2; macOS stops at 4.1, so allocate once with glTexImage2D.
+      glTexImage2D(GL_TEXTURE_2D,0,GL_R8,kMaxCodes,1,0,GL_RED,GL_UNSIGNED_BYTE,nullptr);
       glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
       glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
       glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);

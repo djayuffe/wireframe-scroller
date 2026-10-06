@@ -327,5 +327,23 @@ int main(){
     req(parseWindowSpec("320x200",w,h,e)&&w==320&&h==200,"window: 320x200 (min boundary) ok");
     req(parseWindowSpec("3840x2160",w,h,e)&&w==3840&&h==2160,"window: 3840x2160 (max boundary) ok");
   }
+  { // Effect recipes must never hand the renderer an invalid mesh. main() quits the show when
+    // Renderer::upload() rejects one, and the effects used to leave duplicate edges behind
+    // ("Mesh rejected in scene 2: duplicate edge"). Every curated recipe, plus the
+    // auto path (the scene's recipe + 2 mutation stages).
+    SceneSystem ss;uint64_t seed=0x49574f424a454354ull;
+    // The scenes that produced duplicate edges (0,1,2,5,11,26) plus every 8th, at one time (the full
+    // 51-scene x 2-time sweep takes about a minute).
+    for(int sc=0;sc<ss.count();++sc)for(float t:{0.f}){
+      if(!(sc==0||sc==1||sc==2||sc==5||sc==11||sc==26||sc%8==0))continue;
+      EffectContext ec;ec.time=t;ec.seed=0x50454646u+uint32_t(sc)*131u;
+      const Mesh3* sec=&ss.mesh((sc+1)%ss.count(),t,seed);
+      for(int rid=0;rid<recipeCount();++rid){Mesh3 m=ss.mesh(sc,t,seed);applyRecipe(m,recipe(rid),ec,sec);mesh(m,"effects: recipe output is a valid mesh");}
+      Mesh3 m=ss.mesh(sc,t,seed);EffectRecipe rc;rc.name="Auto";auto base=recipe(sc%recipeCount());auto mut=mutateRecipe(ec.seed,2);int i=0;
+      for(int k=0;k<base.stageCount&&i<6;k++)rc.stages[i++]=base.stages[k];
+      for(int k=0;k<mut.stageCount&&i<6;k++)rc.stages[i++]=mut.stages[k];
+      rc.stageCount=i;applyRecipe(m,rc,ec,sec);mesh(m,"effects: auto recipe output is a valid mesh");
+    }
+  }
   std::cout<<"geometry_tests: PASS; exact 120-cell V="<<c120.v.size()<<" E="<<c120.e.size()<<"\n";
  }

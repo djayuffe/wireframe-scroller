@@ -125,7 +125,7 @@ void main(){
   // procedural background (it would wash out the picture) and use a lower
   // scene gain (the logo is 0-1, not a bright wireframe on black). hasLogo is
   // already computed above (before the warps).
-  vec3 hdr=(1.0-hasLogo)*bg + scene*mix(1.35,1.0,hasLogo) + bloom*(.55+uMusicLevel*1.15);
+  vec3 hdr=(1.0-hasLogo)*bg + scene*mix(1.35,1.0,hasLogo) + bloom*(.32+uMusicLevel*.70);
   hdr+=(1.0-hasLogo)*pal(length(p)*.08+uTime*.02)*pow(max(scene.r,max(scene.g,scene.b)),2.2)*(.45+uMusicLevel);
 
   // --- Uber-compositor signature FX ------------------------------------------
@@ -159,8 +159,10 @@ void main(){
   // 9) Film grain (per-pixel, 60 fps time-quantized).
   hdr+=((hash(gl_FragCoord.xy+floor(uTime*60.))-.5)*.028);
   // 10) ACES tonemap + gentle contrast + gamma.
-  hdr=aces(hdr*(1.12+.55*mlev));
+  // The logo card is already a finished 0..1 picture: expose it lower and skip the mid-tone lift
+  // (pow < 1 brightens), or its silver letters burn out to white under the additive wires and bloom.
+  hdr=aces(hdr*(.92+.38*mlev)*mix(1.0,.74,hasLogo));
   hdr=(hdr-.5)*1.075+.5;
-  hdr=pow(max(hdr,0.),vec3(.86));
+  hdr=pow(max(hdr,0.),vec3(mix(.86,1.0,hasLogo)));
   FragColor=vec4(hdr,1);
 }

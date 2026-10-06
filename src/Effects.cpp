@@ -1,4 +1,5 @@
 #include "Effects.hpp"
+#include <set>
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -52,14 +53,23 @@ void subdiv(Mesh3& m, int n, float j, uint32_t seed) {
   m = std::move(o);
 }
 
+// Drops out-of-range, self and zero-length edges, and duplicate edges (the constellation/bridge
+// effects re-add edges between already-connected vertices). Duplicates must go: the renderer's
+// geo::validate() rejects them, and main() used to quit the whole show on the first rejected mesh;
+// they would also be drawn twice and double the brightness of an additively blended line.
 void sanitize(Mesh3& m) {
   std::vector<Edge> out; out.reserve(m.e.size());
-  for (const Edge& ed : m.e) { if (ed.a >= m.v.size() || ed.b >= m.v.size() || ed.a == ed.b) continue; if (vlen(vsub(m.v[ed.a], m.v[ed.b])) <= 1e-5f) continue; out.push_back(ed); }
+  std::set<std::pair<uint32_t, uint32_t>> seen;
+  for (const Edge& ed : m.e) {
+    if (ed.a >= m.v.size() || ed.b >= m.v.size() || ed.a == ed.b) continue;
+    if (vlen(vsub(m.v[ed.a], m.v[ed.b])) <= 1e-5f) continue;
+    if (!seen.insert(std::minmax(ed.a, ed.b)).second) continue;
+    out.push_back(ed);
+  }
   m.e = std::move(out);
 }
-// The lab's fail-safe gate: finite, in-bounds, no degenerate/self edges.
-// Duplicate edges are allowed (the constellation/bridge effects re-add edges
-// between already-connected vertices, which is harmless for GL_LINES).
+// The lab's fail-safe gate: finite, in-bounds, no degenerate/self edges (duplicates are removed by
+// sanitize() before this runs).
 bool meshOK(const Mesh3& m) {
   for (const auto& p : m.v) if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) return false;
   for (const Edge& ed : m.e) if (ed.a >= m.v.size() || ed.b >= m.v.size() || ed.a == ed.b) return false;
