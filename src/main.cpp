@@ -58,11 +58,11 @@ int main(int argc,char**argv){
    std::string screenshotPath; int maxFrames=0;  // --screenshot PATH / --frames N
   for(int i=1;i<argc;i++){
     std::string arg(argv[i]);
-    if(arg=="--bpm"&&i+1<argc)bpm=std::max(1.0,std::atof(argv[++i]));
+    if(arg=="--bpm"&&i+1<argc){double v=std::atof(argv[++i]);if(!std::isfinite(v)){std::fprintf(stderr,"--bpm: not a finite number\n");return 2;}bpm=std::max(1.0,v);}
     else if(arg=="--music"&&i+1<argc)musicPath=argv[++i];
     else if(arg=="--no-scroller")noScroller=true;
     else if(arg=="--no-post")noPost=true;
-    else if(arg=="--quality"&&i+1<argc)quality=std::clamp(std::atof(argv[++i]),0.25,1.0);
+    else if(arg=="--quality"&&i+1<argc){double v=std::atof(argv[++i]);if(!std::isfinite(v)){std::fprintf(stderr,"--quality: not a finite number\n");return 2;}quality=std::clamp(v,0.25,1.0);}
     else if(arg=="--logos"&&i+1<argc)logoOverride=argv[++i];
     else if(arg=="--window"&&i+1<argc){
        std::string werr; int ww,wh;

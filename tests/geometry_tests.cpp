@@ -344,6 +344,51 @@ int main(){
       for(int k=0;k<mut.stageCount&&i<6;k++)rc.stages[i++]=mut.stages[k];
       rc.stageCount=i;applyRecipe(m,rc,ec,sec);mesh(m,"effects: auto recipe output is a valid mesh");
     }
+   }
+   // Regression: the "Dual Bridge" (36) and "Nearest Bridge" (37) effects used to
+   // iterate s->v / s->e while pushing into m.v / m.e. When s == &m (the
+   // caller passes the target mesh as its own secondary) the push_back
+   // reallocated m.v mid-iteration — a heap-use-after-free (caught by ASan) and
+   // formal UB in the shipping build. The fix copies s->v (and s->e) into
+   // locals first. Exercise the exact s==&m aliasing pattern.
+   { EffectContext ec; ec.time=1.0f; ec.amount=1.f; ec.seed=0xABCDu;
+     auto runBridge=[&](int id,const char*name){
+       // A moderately sized mesh so the first push_back triggers a realloc
+       // (a tiny mesh might fit in the small-object buffer without a move).
+       Mesh3 m;
+       for(int i=0;i<64;i++){float a=i*0.1f; m.v.push_back({std::cos(a),0.1f*std::sin(2*a),std::sin(a)});}
+       for(int i=0;i<63;i++)m.e.push_back({(uint32_t)i,(uint32_t)(i+1)});
+       std::string w; req(geo::validate(m,&w),"alias: input mesh valid");
+       // Call with s == &m (self-aliasing) — the exact UB pattern.
+       req(applyEffect(m,id,ec,&m),name);
+       req(geo::validate(m,&w),name);
+       req(!m.v.empty()&&!m.e.empty(),name);
+     };
+     runBridge(36,"alias: effect 36 (Dual Bridge) self-alias no crash");
+     runBridge(37,"alias: effect 37 (Nearest Bridge) self-alias no crash");
+   }
+   // Regression: scrollOffset must be a CONTINUOUS, monotonic function of time.
+   // The old code scaled the distance by a per-frame speed
+   // (90*(0.7+0.3*(1-beatPhase)) + music*40), so with a live beatPhase/music
+   // the offset teleported forward/backward every frame (visible stutter).
+   // The fix is a constant 90 px/s: varying beatPhase/music must NOT change the
+   // offset at a fixed time, and consecutive samples must advance smoothly.
+   { float wrap=100.f+50.f;
+     // beatPhase and music must have NO effect on the offset (constant speed)
+     for(double t:{1.0,2.0,5.0,13.0,99.0,3600.0}){
+       float base=scrollOffset(t,0.f,100.f,50.f);
+       req(std::fabs(scrollOffset(t,0.25f,100.f,50.f)-base)<1e-4f,"scroll: beatPhase-independent");
+       req(std::fabs(scrollOffset(t,1.f,100.f,50.f)-base)<1e-4f,"scroll: beatPhase=1 independent");
+       req(std::fabs(scrollOffset(t,0.5f,100.f,50.f)-base)<1e-4f,"scroll: beatPhase=0.5 independent");
+       req(std::fabs(scrollOffset(t,0.5f,100.f,50.f,1.f)-base)<1e-4f,"scroll: music-independent");
+     }
+     // monotonic + smooth: a small dt advances by ~dt*90 px (no jump/back-step)
+     for(double t=0;t<300;t+=0.5){
+       float o=scrollOffset(t,0.f,100.f,50.f);
+       float o2=scrollOffset(t+0.01f,0.f,100.f,50.f);
+       float step=o2-o; if(step<0)step+=wrap;  // allow one wrap
+       req(step>0.f&&step<5.f,"scroll: smooth monotonic advance (no teleport)");
+     }
+   }
+   std::cout<<"geometry_tests: PASS; exact 120-cell V="<<c120.v.size()<<" E="<<c120.e.size()<<"\n";
   }
-  std::cout<<"geometry_tests: PASS; exact 120-cell V="<<c120.v.size()<<" E="<<c120.e.size()<<"\n";
- }

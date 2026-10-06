@@ -245,9 +245,15 @@ bool Renderer::loadLogos(const std::string&dir){
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-    L.w=img.w;L.h=img.h;
-    logos_.push_back(L);
-  }
+     // Check for a GL error after the upload: a corrupt/oversized image can
+     // leave the texture incomplete (glTexImage2D returns without filling it),
+     // which would render as a black card. Detect it and skip the entry.
+     if(glGetError()!=GL_NONE){
+       glDeleteTextures(1,&L.tex);L.tex=0;continue;
+     }
+     L.w=img.w;L.h=img.h;
+     logos_.push_back(L);
+   }
   glBindTexture(GL_TEXTURE_2D,0);
   if(logos_.empty())return false;
   hasLogos_=true;
@@ -353,10 +359,14 @@ bool Renderer::drawTravelers(float time,int width,int height,float aspect,float 
    // in logo mode, so in no-logo mode the travelers inherited whatever blend
    // state leaked in and often rendered opaque-replace, clobbering the mesh.)
    glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);glBlendEquation(GL_FUNC_ADD);
-   glBindVertexArray(travelerVao_);
-   glDrawElements(GL_LINES,(GLsizei)travelerEdgeCount_,GL_UNSIGNED_INT,nullptr);
-   glDisable(GL_BLEND);
-   return true;
+    glBindVertexArray(travelerVao_);
+    // Bind the EBO explicitly: drawTravelers does NOT rely on the global
+    // GL_ELEMENT_ARRAY_BUFFER state still pointing at travelerEbo_ from init()
+    // (any other EBO bound by another path would silently break the draw).
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,travelerEbo_);
+    glDrawElements(GL_LINES,(GLsizei)travelerEdgeCount_,GL_UNSIGNED_INT,nullptr);
+    glDisable(GL_BLEND);
+    return true;
  }
 bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,float musicLevel,float bpm){
   (void)sceneIndex;
@@ -372,7 +382,11 @@ bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,fl
   glBindTexture(GL_TEXTURE_2D,hdrTex_);
   if(uPostScene_>=0)glUniform1i(uPostScene_,0);
   if(uPostTime_>=0)glUniform1f(uPostTime_,time);
-  if(uPostResolution_>=0)glUniform2f(uPostResolution_,float(width),float(height));
+   // The post pass runs on the HDR buffer (hdrW_ x hdrH_), not the screen. Pass
+   // the HDR size so the shader's pixel-size (bloom taps) and aspect (p) are
+   // measured in the buffer the scene actually lives in — at --quality<1 the
+   // screen size would make the bloom taps too coarse.
+   if(uPostResolution_>=0)glUniform2f(uPostResolution_,float(std::max(1,hdrW_)),float(std::max(1,hdrH_)));
   if(uPostMusic_>=0)glUniform1f(uPostMusic_,std::clamp(musicLevel,0.f,1.f));
   if(uPostBpm_>=0)glUniform1f(uPostBpm_,bpm);
   if(uPostBypass_>=0)glUniform1f(uPostBypass_,postEnabled_?0.f:1.f);

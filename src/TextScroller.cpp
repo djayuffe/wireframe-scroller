@@ -120,8 +120,16 @@ std::vector<uint8_t> pack() {
 }
 float scrollOffset(double seconds, float beatPhase, float windowWidthPx,
                     int textWidthPx, float musicLevel) {
-  // Base speed: ~90 px/s, eased by beat (fastest on the downbeat) and music.
-  float speed = 90.f * (0.7f + 0.3f * (1.f - beatPhase)) + musicLevel * 40.f;
+  // The scroll speed is CONSTANT (90 px/s) — deliberately NOT eased by beat or
+  // music level. The old code did speed = 90*(0.7+0.3*(1-beatPhase)) +
+  // music*40 and returned fmod(seconds*speed, wrap). Because `speed` changes
+  // every frame (beatPhase/musicLevel are live), seconds*speed teleported the
+  // marquee forward/backward each frame instead of advancing smoothly — a
+  // visible stutter/jump. A constant speed makes the offset a continuous,
+  // monotonic function of time (fmod of a linear distance). beatPhase and
+  // musicLevel are kept in the signature for ABI compatibility but unused.
+  (void)beatPhase; (void)musicLevel;
+  float speed = 90.f;
   // Use double for the long-running distance/wrap: (float)seconds loses
   // sub-pixel precision after a few minutes, causing scroll jitter. Double
   // keeps the in-cycle remainder stable for hours.
