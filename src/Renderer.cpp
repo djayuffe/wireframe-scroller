@@ -175,7 +175,7 @@ bool Renderer::resizeHdr(int width,int height){
 // root of the density (about constant total energy) and never brighten above 1.
 static float wireGainFor(int indexCount){
   float lines=float(std::max(1,indexCount/2));
-  return std::clamp(0.80f*std::sqrt(500.f/lines),0.28f,1.0f);
+  return std::clamp(0.80f*std::sqrt(500.f/lines),0.05f,1.0f);   // dense recipe scenes reach tens of thousands of lines
 }
 bool Renderer::upload(const Mesh3&m){std::string why;if(!geo::validate(m,&why)){error_=why;return false;}std::vector<uint32_t>ix;ix.reserve(m.e.size()*2);for(auto e:m.e){ix.push_back(e.a);ix.push_back(e.b);}edgeCount_=(int)ix.size();glBindVertexArray(vao_);glBindBuffer(GL_ARRAY_BUFFER,vbo_);size_t vb=m.v.size()*sizeof(V3);if(vb>vboCapacity_){vboCapacity_=std::max(vb,vboCapacity_*2+4096);glBufferData(GL_ARRAY_BUFFER,vboCapacity_,nullptr,GL_DYNAMIC_DRAW);}if(vb)glBufferSubData(GL_ARRAY_BUFFER,0,vb,m.v.data());glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(V3),nullptr);glEnableVertexAttribArray(0);glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo_);size_t eb=ix.size()*sizeof(uint32_t);if(eb>eboCapacity_){eboCapacity_=std::max(eb,eboCapacity_*2+4096);glBufferData(GL_ELEMENT_ARRAY_BUFFER,eboCapacity_,nullptr,GL_DYNAMIC_DRAW);}if(eb)glBufferSubData(GL_ELEMENT_ARRAY_BUFFER,0,eb,ix.data());return true;}
 bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,float scale,float lineWidth,float musicLevel){if(!resizeHdr(width,height))return false;float ml=std::clamp(musicLevel,0.f,1.f);
@@ -205,7 +205,7 @@ bool Renderer::draw(float t,int width,int height,float aspect,int sceneIndex,flo
      glUniformMatrix4fv(uMVP_,1,GL_FALSE,M);
      if(uTime_>=0)glUniform1f(uTime_,t);
      if(uMusicLevel_>=0)glUniform1f(uMusicLevel_,ml);
-    glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);if(uGain_>=0)glUniform1f(uGain_,wireGainFor(edgeCount_));
+    glUniform3f(uColor_,1.2f+.75f*ml,1.55f+.35f*ml,2.1f+1.1f*ml);if(uGain_>=0)glUniform1f(uGain_,wireGainFor(edgeCount_)*(1.f-.22f*logoVis_));
     glLineWidth(std::max(1.f,lineWidth+ml*.75f));
     glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);glBlendEquation(GL_FUNC_ADD);
     glBindVertexArray(vao_);
@@ -260,26 +260,25 @@ bool Renderer::loadLogos(const std::string&dir){
 // is guaranteed visible (no post-shader FBO blend to break).
 bool Renderer::drawBackground(float time,int width,int height,int sceneIndex,float musicLevel,bool logoComposite){
   if(!bgProgram_||logos_.empty())return false;
-  int target=(logos_.size()>1)?(sceneIndex%(int)logos_.size()):0;
-  // On scene change, start a crossfade from the current (A) to the target (B).
-  if(target!=bgCurrent_){
-    bgTexB_=logos_[target].tex;
-    bgMix_=0.f;
-    bgTarget_=target;
-  }
-  // Advance the crossfade; when done, promote B -> A. The fade advances at a
-  // fixed RATE (per second), not per frame, so a 144 Hz monitor crossfades at
-  // the same wall-clock speed as 60 Hz. (The old code did bgMix_+=0.03 per
-  // frame, which was 2.4x faster on 144 Hz.) dt is clamped so a long stall
-  // (e.g. window iconified) doesn't jump the fade to completion.
-  if(bgTarget_!=bgCurrent_){
-    double dt=bgLastTime_<0.0?0.0:std::max(0.0,std::min(0.1,(time-bgLastTime_)));
-    bgMix_=std::min(1.f,bgMix_+float(dt*3.0f));   // full fade in ~1/3 s
-    if(bgMix_>=1.f){ bgTexA_=bgTexB_; bgCurrent_=bgTarget_; bgMix_=0.f; }
-  } else {
-    bgMix_=0.f;
-    if(!bgTexB_||bgTexB_==0) bgTexB_=bgTexA_;
-  }
+  (void)sceneIndex;
+  // Logo show, driven by time (not by scene changes): each card fades in, holds for a few seconds,
+  // fades out to black, then a short black beat shows only the wireframe, then the next card.
+  // Eased fades; the cycle never depends on the frame rate.
+  static constexpr double kFadeIn=1.0,kHold=3.5,kFadeOut=1.0,kBlack=9.0;   // a long black beat between cards
+  static constexpr double kCycle=kFadeIn+kHold+kFadeOut+kBlack;
+  const int n=(int)logos_.size();
+  const double cyc=std::max(0.0,(double)time)/kCycle;
+  const int idx=int(std::floor(cyc))%n;
+  const double ph=(cyc-std::floor(cyc))*kCycle;
+  auto ease=[](double x){x=std::clamp(x,0.0,1.0);return float(x*x*(3.0-2.0*x));};
+  float vis;
+  if(ph<kFadeIn)vis=ease(ph/kFadeIn);
+  else if(ph<kFadeIn+kHold)vis=1.f;
+  else if(ph<kFadeIn+kHold+kFadeOut)vis=1.f-ease((ph-kFadeIn-kHold)/kFadeOut);
+  else vis=0.f;
+  logoVis_=vis;
+  bgCurrent_=bgTarget_=idx;bgMix_=0.f;
+  bgTexA_=bgTexB_=logos_[idx].tex;
   bgLastTime_=time;
   if(!bgTexA_) bgTexA_=logos_[0].tex;
   if(!bgTexB_) bgTexB_=logos_[0].tex;
@@ -293,7 +292,7 @@ bool Renderer::drawBackground(float time,int width,int height,int sceneIndex,flo
    // hard-code it — a non-standard card would be distorted).
    const auto& cur=logos_[bgCurrent_>=0?bgCurrent_:0];
    if(uBgTexAspect_>=0)glUniform2f(uBgTexAspect_,(float)std::max(1,cur.w),(float)std::max(1,cur.h));
-  if(uBgOp_>=0)glUniform1f(uBgOp_,1.0f);
+  if(uBgOp_>=0)glUniform1f(uBgOp_,logoVis_);   // the card's brightness: fades to black
   if(uBgTime_>=0)glUniform1f(uBgTime_,time);
   if(uBgMusic_>=0)glUniform1f(uBgMusic_,std::clamp(musicLevel,0.f,1.f));
   glActiveTexture(GL_TEXTURE0);

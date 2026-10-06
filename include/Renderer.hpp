@@ -67,5 +67,6 @@ public:
    int bgCurrent_=-1;           // logo index currently shown in slot A
    int bgTarget_=-1;            // logo index fading in (slot B)
    float bgMix_=0.f;            // 0=A, 1=B
+   float logoVis_=1.f;          // 0..1 how visible the logo card is right now (fade in / hold / fade out / black)
    double bgLastTime_=-1.0;     // last drawBackground time (for frame-rate-independent fade)
 };

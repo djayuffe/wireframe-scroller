@@ -278,13 +278,15 @@ int main(int argc,char**argv){
     // is included. The capture is one-shot; after it the app keeps running
     // unless --frames also terminates it.
     static bool shotTaken=false;
-    if(!screenshotPath.empty()&&!shotTaken&&W>0&&H>0){
-      if(r.screenshot(screenshotPath,W,H)){std::fprintf(stdout,"screenshot: %s (%dx%d)\n",screenshotPath.c_str(),W,H);shotTaken=true;}
+    static int frameCount=0;   // frames rendered so far (also used by --frames below)
+    // With --frames N the picture is taken on the Nth frame (so a timed effect can be sampled);
+    // without it, on the first frame.
+    if(!screenshotPath.empty()&&!shotTaken&&W>0&&H>0&&(maxFrames<=0||frameCount+1>=maxFrames)){
+      if(r.screenshot(screenshotPath,W,H)){std::fprintf(stdout,"screenshot: %s (%dx%d) at show time %.2fs\n",screenshotPath.c_str(),W,H,showSeconds);shotTaken=true;}
       else std::fprintf(stderr,"screenshot failed: %s\n",r.error().c_str());
     }
     // --frames N: exit after N rendered frames (for automated verification).
     // Counts frames actually rendered (not skipped-by-iconify ones).
-    static int frameCount=0;
     if(maxFrames>0){ if(++frameCount>=maxFrames){std::fprintf(stdout,"--frames %d reached; exiting\n",maxFrames);break;} }
    glfwSwapBuffers(w);glfwPollEvents();if(glfwGetKey(w,GLFW_KEY_ESCAPE)==GLFW_PRESS)glfwSetWindowShouldClose(w,1);
   }

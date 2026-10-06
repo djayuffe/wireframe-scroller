@@ -38,5 +38,10 @@ void main(){
   // Straight (non-premultiplied) RGB; the blend (SRC_ALPHA/ONE_MINUS_SRC_ALPHA)
   // applies the opacity. In logo mode the logo is drawn opaque (no blend) as
   // the backdrop, so uOpacity=1.0 here is correct.
-  FragColor=vec4(col,uOpacity);
+  // uOpacity is the card's brightness (the logo show fades it in and out against black). The pass
+  // draws opaque with blending off, so apply it to the colour, not to alpha.
+  // The card is also held below full brightness (0.85): additive wires cannot show on top of
+  // white, and a card at full strength reads as washed out once glow is added.
+  col*=uOpacity*0.85;
+  FragColor=vec4(col,1.0);
 }

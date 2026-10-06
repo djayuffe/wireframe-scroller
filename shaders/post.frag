@@ -125,7 +125,7 @@ void main(){
   // procedural background (it would wash out the picture) and use a lower
   // scene gain (the logo is 0-1, not a bright wireframe on black). hasLogo is
   // already computed above (before the warps).
-  vec3 hdr=(1.0-hasLogo)*bg + scene*mix(1.35,1.0,hasLogo) + bloom*(.32+uMusicLevel*.70);
+  vec3 hdr=(1.0-hasLogo)*bg + scene*mix(1.35,1.0,hasLogo) + bloom*(.32+uMusicLevel*.70)*mix(1.0,.30,hasLogo);   // little glow over a logo card: it washes out
   hdr+=(1.0-hasLogo)*pal(length(p)*.08+uTime*.02)*pow(max(scene.r,max(scene.g,scene.b)),2.2)*(.45+uMusicLevel);
 
   // --- Uber-compositor signature FX ------------------------------------------
