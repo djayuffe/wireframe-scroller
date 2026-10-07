@@ -289,9 +289,9 @@ int main(){
           }
         }
       }
-      // the scroller shader must use the GLSL `mod` builtin for bit extraction
+      // the scroller shader must extract glyph bits with integer ops (pow(2,bit)+floor is inexact on some GL drivers)
       { std::ifstream f(shadersDir/"scroller.frag"); std::string all((std::istreambuf_iterator<char>(f)),std::istreambuf_iterator<char>());
-        req(all.find("mod(floor(v / pow(2.0, bit)), 2.0)")!=std::string::npos,"scroller uses GLSL mod builtin");
+        req(all.find("(int(v) >> int(bit)) & 1")!=std::string::npos,"scroller extracts glyph bits with integer ops");
         // The code-strip decode MUST scale the GL_R8 read-back by 255 (the byte
         // is normalized to [0,1] on read). A regression that drops the *255
         // collapses every char to code 0 -> blank marquee (the original bug).

@@ -28,9 +28,9 @@ Captured with `--window 960x540 --screenshot PATH --frames N`.
 | ![Art: ink filaments](docs/screenshots/8-art-ink-filaments.jpg) | ![Art: cracked glass](docs/screenshots/9-art-glass-voronoi.jpg) |
 | Black-break art layer: neon ink filaments | Black-break art layer: beat-lit cracked glass |
 | ![Scroller](docs/screenshots/10-scroller-fixed.jpg) | ![Klein bottle](docs/screenshots/5-klein-bottle.jpg) |
-| Beat-synced scroller ticker at the bottom | Klein bottle |
-| ![Klein bottle](docs/screenshots/5-klein-bottle.jpg) | ![Dini surface](docs/screenshots/6-dini-surface.jpg) |
-| Klein bottle immersion | Dini surface |
+| Beat-synced scroller ticker at the bottom | Klein bottle immersion |
+| ![Dini surface](docs/screenshots/6-dini-surface.jpg) | |
+| Dini surface | |
 
 ## Implemented scenes
 The show contains 51 validated scenes. Exact or derived scenes include the 600-cell projection, the exact 600-cell face-plane slice and the dual-derived 120-cell projection. Parametric and numerical scenes include TPMS surfaces, Hopf fibres, Boy surface, superformula, Clifford torus, quaternion-Julia boundary slice, Lissajous and chaotic attractors, 25 v4 exotic geometry families and 10 ported unknown-lab procedural wire objects.
@@ -219,8 +219,11 @@ See `docs/EFFECTS.md` for the implemented effect catalogue.
 - **Weak GPU**: use `--quality 0.5` or `--no-post`.
 
 ## Release notes
+### v4.31
+- First release where the scroller fix and the updated shader test are both in and the suite passes. v4.29 and v4.30 were tagged with that one test failing.
+
 ### v4.30
-- Same as v4.29 plus the scroller shader test updated to match the fix (v4.29 shipped with that test failing).
+- Tag only; superseded by v4.31.
 
 ### v4.29
 - Fixed the text scroller: it was upside-down at the top of the screen with corrupted glyphs (inconsistent font table, wrong code-strip texel mapping, inexact `pow(2,bit)`). It is now a crisp ticker at the bottom with a clean 5x7 font.
