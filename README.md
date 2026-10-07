@@ -10,6 +10,8 @@ Copyright (c) 2026 Ulf Bertilsson. Code is MIT licensed. Tags: `wireframe` `demo
 - **51 scenes**: the 600-cell, its exact face-plane slice, the dual 120-cell, tesseract, Hopf fibres, Boy surface, Klein bottle, Dini surface, TPMS, Clifford torus, quaternion-Julia slice, Lissajous and chaotic attractors, and 10 procedural "unknown lab" objects.
 - **Effect engine**: 64 CPU vertex-warper effects, 24 curated multi-stage recipes and a deterministic mutation generator. Every stage is fail-safe, so a bad combination restores the previous mesh instead of blanking the scene.
 - **Logo show**: 20 full-screen UBER cards fade in, hold for a few seconds, fade out, then give way to a long black break where the wireframe has the screen to itself.
+- **Arty black breaks**: when the logo is away, a procedural art layer fades in (domain-warped neon ink, beat-lit cracked-glass Voronoi, kaleidoscopic rose rings), slowly cross-fading between styles.
+- **Eye candy**: anamorphic blue lens streaks and radial light rays from bright wires, plus lensing, shockwave and chromatic aberration that fade in as the logo fades out.
 - **HDR pipeline**: RGBA16F target, additive line blending, bloom, lensing, chromatic aberration, glitch slices, grain and an ACES tone map. Logo-aware gain keeps wires readable and the logo unwashed.
 - **Music-reactive**: SDL2 and libopenmpt play a bundled public-domain MOD. Bass, mid and treble bands drive glow, bloom and the effect system. Without audio, a deterministic BPM clock takes over.
 - **Tested**: geometry validity, canonical V/E/F counts, a recipe-validity regression over every recipe, and timeline math, all built with `-Wall -Wextra -Wpedantic -Werror`.
@@ -23,6 +25,8 @@ Captured with `--window 960x540 --screenshot PATH --frames N`.
 | Hopf fibres, warped by an effect recipe, with travelling octahedra | Seeded harmonic "discovered object" under heavy effect layering |
 | ![Logo crystal](docs/screenshots/3-logo-crystal.jpg) | ![Fade transition](docs/screenshots/7-fade-transition.jpg) |
 | Logo hold: the UBER card at full screen, the wireframe dimmed | Fade transition between logo and black break |
+| ![Art: ink filaments](docs/screenshots/8-art-ink-filaments.jpg) | ![Art: cracked glass](docs/screenshots/9-art-glass-voronoi.jpg) |
+| Black-break art layer: neon ink filaments | Black-break art layer: beat-lit cracked glass |
 | ![Klein bottle](docs/screenshots/5-klein-bottle.jpg) | ![Dini surface](docs/screenshots/6-dini-surface.jpg) |
 | Klein bottle immersion | Dini surface |
 
@@ -213,6 +217,9 @@ See `docs/EFFECTS.md` for the implemented effect catalogue.
 - **Weak GPU**: use `--quality 0.5` or `--no-post`.
 
 ## Release notes
+### v4.28
+- Arty procedural background layer and anamorphic streak / light-ray eye candy in the post pass; new `uLogoVis` uniform fades them against the logo show.
+
 ### v4.27
 - Fixed hangs: a false GLFW context-lost check caused per-frame reinitialisation, and a rejected mesh with duplicate edges ended the show. `sanitize()` now removes duplicate, self and out-of-range edges, with a regression test.
 - Logo now renders the right way round and fills the screen.

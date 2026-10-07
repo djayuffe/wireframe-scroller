@@ -71,12 +71,12 @@ int main(int argc,char**argv){
       }
     else if(arg=="--fullscreen")fullscreen=true;
     else if(arg=="--recipe"&&i+1<argc){recipeArg=std::atoi(argv[++i]);haveRecipe=true;}
-    else if(arg=="--version"){std::fprintf(stdout,"Impossible Wireframe v4.27\n");return 0;}
+    else if(arg=="--version"){std::fprintf(stdout,"Impossible Wireframe v4.28\n");return 0;}
     else if(arg=="--screenshot"&&i+1<argc){screenshotPath=argv[++i];}
     else if(arg=="--frames"&&i+1<argc){maxFrames=std::max(0,std::atoi(argv[++i]));}
     else if(arg=="--help"||arg=="-h"){
       std::fprintf(stdout,
-        "Impossible Wireframe v4.27\n"
+        "Impossible Wireframe v4.28\n"
         "Usage: impossible_wireframe [options]\n"
         "  --bpm N         Tempo (default 132)\n"
         "  --music PATH    Audio module/wav to play (default: assets/music if present)\n"
@@ -127,7 +127,7 @@ int main(int argc,char**argv){
   } else {
     cw=winW>0?winW:1440; ch=winH>0?winH:900;
   }
-  GLFWwindow*w=glfwCreateWindow(cw,ch,"Impossible Wireframe v4.27",mon,nullptr);
+  GLFWwindow*w=glfwCreateWindow(cw,ch,"Impossible Wireframe v4.28",mon,nullptr);
   if(!w){std::fprintf(stderr,"OpenGL 4.1 context creation failed\n");glfwTerminate();return 2;}
   if(fullscreen)glfwSetWindowMonitor(w,mon,0,0,cw,ch,vm?vm->refreshRate:0);
   glfwMakeContextCurrent(w);glfwSwapInterval(fullscreen?0:1);  // uncapped in fullscreen

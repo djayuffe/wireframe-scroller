@@ -142,7 +142,7 @@ bool Renderer::initScroller(const std::string&dir){std::string vs=readText(dir+"
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D,0);
     return true;}
-bool Renderer::initPost(const std::string&dir){std::string vs=readText(dir+"/post.vert"),fs=readText(dir+"/post.frag");if(vs.empty()||fs.empty()){error_="cannot read post shaders from "+dir;return false;}postProgram_=linkProgram(vs,fs,error_);if(!postProgram_)return false;uPostScene_=glGetUniformLocation(postProgram_,"uScene");uPostTime_=glGetUniformLocation(postProgram_,"uTime");uPostResolution_=glGetUniformLocation(postProgram_,"uResolution");uPostMusic_=glGetUniformLocation(postProgram_,"uMusicLevel");uPostBpm_=glGetUniformLocation(postProgram_,"uBpm");uPostBypass_=glGetUniformLocation(postProgram_,"uBypass");uPostHasLogo_=glGetUniformLocation(postProgram_,"uHasLogo");setupFullscreenVao(postVao_,postVbo_);glUseProgram(postProgram_);if(uPostScene_>=0)glUniform1i(uPostScene_,0);return true;}
+bool Renderer::initPost(const std::string&dir){std::string vs=readText(dir+"/post.vert"),fs=readText(dir+"/post.frag");if(vs.empty()||fs.empty()){error_="cannot read post shaders from "+dir;return false;}postProgram_=linkProgram(vs,fs,error_);if(!postProgram_)return false;uPostScene_=glGetUniformLocation(postProgram_,"uScene");uPostTime_=glGetUniformLocation(postProgram_,"uTime");uPostResolution_=glGetUniformLocation(postProgram_,"uResolution");uPostMusic_=glGetUniformLocation(postProgram_,"uMusicLevel");uPostBpm_=glGetUniformLocation(postProgram_,"uBpm");uPostBypass_=glGetUniformLocation(postProgram_,"uBypass");uPostHasLogo_=glGetUniformLocation(postProgram_,"uHasLogo");uPostLogoVis_=glGetUniformLocation(postProgram_,"uLogoVis");setupFullscreenVao(postVao_,postVbo_);glUseProgram(postProgram_);if(uPostScene_>=0)glUniform1i(uPostScene_,0);return true;}
 bool Renderer::resizeHdr(int width,int height){
   // Apply the render scale: the HDR target (and everything rendered into it —
   // the 3D wireframe, travelers, and the post/FX pass) runs at a fraction of
@@ -391,6 +391,7 @@ bool Renderer::finishLogoFrame(float time,int width,int height,int sceneIndex,fl
   if(uPostBpm_>=0)glUniform1f(uPostBpm_,bpm);
   if(uPostBypass_>=0)glUniform1f(uPostBypass_,postEnabled_?0.f:1.f);
   if(uPostHasLogo_>=0)glUniform1f(uPostHasLogo_,hasLogos_?1.f:0.f);
+  if(uPostLogoVis_>=0)glUniform1f(uPostLogoVis_,logoVis_);
   glBindVertexArray(postVao_);
   glDrawArrays(GL_TRIANGLES,0,3);
   return true;

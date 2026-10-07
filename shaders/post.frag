@@ -16,6 +16,9 @@ uniform float uHasLogo;
 // output it (the 3D + logo are still composited; only the screen-space FX,
 // procedural background, and grain are skipped). This is the fast/debug path.
 uniform float uBypass;
+// Logo card visibility 0..1 (drives the time-driven logo show): the art background and
+// screen-space warps fade IN as the logo fades OUT, so the black breaks are not empty.
+uniform float uLogoVis;
 
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}
 float hash21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}
@@ -32,6 +35,50 @@ float tunnelLayer(vec2 p,float z,float twist){
   float ribs=pow(.5+.5*sin(a*18.0+z*7.0),18.0);
   float rings=pow(.5+.5*sin(r*18.0-z*5.5),22.0);
   return (ribs*.55+rings*.45)*smoothstep(1.95,.18,r);
+}
+
+
+// ---- Arty layers (shown whenever the logo card is not on screen) -----------
+vec2 rot2(vec2 p,float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c)*p;}
+// Voronoi edge distance: glowing cracked-glass cells.
+float voroEdge(vec2 p){
+  vec2 g=floor(p),f=fract(p);float d1=8.,d2=8.;
+  for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){
+    vec2 o=vec2(i,j);vec2 h=vec2(hash(g+o),hash(g+o+17.3));
+    vec2 r=o+.5+.45*sin(uTime*.35+6.2831*h)-f;float d=dot(r,r);
+    if(d<d1){d2=d1;d1=d;}else if(d<d2)d2=d;}
+  return sqrt(d2)-sqrt(d1);
+}
+// Domain-warped ink filaments (ridged fbm of a warped field).
+float inkFlow(vec2 p,float t){
+  vec2 q=vec2(fbm(p+vec2(0,t*.07)),fbm(p+vec2(5.2,1.3)-t*.05));
+  vec2 r=vec2(fbm(p+3.*q+vec2(1.7,9.2)+t*.06),fbm(p+3.*q+vec2(8.3,2.8)-t*.04));
+  float v=fbm(p+3.*r);
+  return 1.-abs(2.*v-1.);
+}
+vec3 artLayer(vec2 p,float ml,float beat){
+  float t=uTime;
+  // Three styles cross-fade slowly so the break never looks the same twice.
+  float w0=.5+.5*sin(t*.11),w1=.5+.5*sin(t*.11+2.094),w2=.5+.5*sin(t*.11+4.189);
+  float ws=w0+w1+w2;w0/=ws;w1/=ws;w2/=ws;
+  vec3 c=vec3(0);
+  // A: neon ink filaments
+  float ink=pow(inkFlow(p*1.15,t),6.0);
+  c+=w0*pal(ink*.35+t*.02+p.x*.05)*ink*(.55+.9*ml);
+  // B: cracked-glass voronoi with beat-lit seams
+  float ve=voroEdge(rot2(p,t*.03)*3.2);
+  float seam=exp(-ve*9.0);
+  c+=w1*pal(ve*.5+t*.03)*seam*(.35+.9*ml+.8*beat);
+  // C: kaleidoscopic rose rings
+  vec2 k=p;float a=atan(k.y,k.x),r=length(k);
+  float seg=6.2831853/8.;a=abs(mod(a+t*.05,seg)-seg*.5);
+  vec2 kp=vec2(cos(a),sin(a))*r;
+  float rose=pow(.5+.5*sin(kp.x*14.-t*.9+sin(kp.y*9.+t*.4)*2.),22.)
+            +pow(.5+.5*sin(kp.y*11.+t*.7+kp.x*4.),30.);
+  c+=w2*pal(r*.2-t*.03)*rose*(.35+.9*ml);
+  // soft iridescent mist so the dark never goes flat
+  c+=pal(fbm(p*.9+t*.02)+t*.01)*.035*(.6+ml);
+  return c*smoothstep(2.4,.2,r)*.9;
 }
 
 void main(){
@@ -56,7 +103,7 @@ void main(){
   // 0-1 picture, so screen-space UV warps (lensing/shockwave/barrel/CA) would
   // smear it into an unrecognizable smudge. Compute this BEFORE the warps so
   // they can be gated off.
-  float hasLogo=step(.5,uHasLogo);
+  float hasLogo=step(.5,uHasLogo)*clamp(uLogoVis,0.,1.);
 
   // --- Screen-space UV warps (applied to the scene sample) -------------------
   // These displace the sampling UV. They look great on a wireframe-on-black
@@ -67,7 +114,7 @@ void main(){
    // Clamp the displaced UV to [0,1] — near the center the magnification can
    // push it well outside the buffer, which would sample clamped black borders.
    { vec2 cp=suv-.5; float rr=max(length(cp),.035);
-     float lens=(.35+.65*beat)*(1.0-hasLogo);
+     float lens=(.35+.65*beat)*pow(1.0-hasLogo,3.0);
      suv=clamp(.5+cp*(1.0+lens*.035/(rr*rr)),0.0,1.0); }
   // 2) Refractive shockwave ring: a Gaussian ring that displaces the image.
   { float shock=fract(uTime*.145);
@@ -92,6 +139,18 @@ void main(){
   bloom+=texture(uScene,suv+vec2(-px.x*3.5,-px.y*2.5)).rgb;
   bloom/=6.;
 
+
+  // Eye candy: anamorphic horizontal streak + radial light rays (bright pixels only).
+  vec3 streak=vec3(0),rays=vec3(0);
+  for(int i=1;i<=8;i++){
+    float fi=float(i);float wgt=exp(-fi*.33);
+    vec3 a=texture(uScene,suv+vec2(px.x*fi*7.,0)).rgb,b=texture(uScene,suv-vec2(px.x*fi*7.,0)).rgb;
+    streak+=(max(a-.55,0.)+max(b-.55,0.))*wgt;
+    vec2 dir=(vec2(.5)-suv)*(fi*.018);
+    rays+=max(texture(uScene,suv+dir).rgb-.6,0.)*(1.-fi/9.);
+  }
+  streak*=vec3(.55,.8,1.35)*.11;           // cool blue anamorphic tint
+  rays*=pal(uTime*.05)*.05*(.5+mlev+beat);
   float n=fbm(p*1.7+uTime*.035);
   float n2=fbm(p*3.1+vec2(uTime*.05,-uTime*.025));
   float star=step(.996,hash(floor((p+2.)*vec2(120.,70.)+floor(uTime*.25))));
@@ -113,6 +172,7 @@ void main(){
   float glimmer=pow(max(0.,sin((p.x*23.-p.y*17.)+uTime*(2.2+uMusicLevel*3.))),28.)*
                 smoothstep(.15,1.6,length(p))*(.03+.13*uMusicLevel);
   vec3 bg=vec3(.0015,.003,.013);
+  bg+=artLayer(p,mlev,beat)*.38*pow(1.0-hasLogo,3.0);
   bg+=pal(n*.32+uTime*.015)*neb;
   bg+=pal(p.y*.08+uTime*.035+n2*.15)*aurora*(.045+.16*uMusicLevel);
   bg+=vec3(.35,.55,1.2)*(star*.22+grid);
@@ -126,6 +186,7 @@ void main(){
   // scene gain (the logo is 0-1, not a bright wireframe on black). hasLogo is
   // already computed above (before the warps).
   vec3 hdr=(1.0-hasLogo)*bg + scene*mix(1.35,1.0,hasLogo) + bloom*(.32+uMusicLevel*.70)*mix(1.0,.30,hasLogo);   // little glow over a logo card: it washes out
+  hdr+=(streak+rays)*(1.0-.85*hasLogo);
   hdr+=(1.0-hasLogo)*pal(length(p)*.08+uTime*.02)*pow(max(scene.r,max(scene.g,scene.b)),2.2)*(.45+uMusicLevel);
 
   // --- Uber-compositor signature FX ------------------------------------------
