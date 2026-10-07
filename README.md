@@ -27,6 +27,8 @@ Captured with `--window 960x540 --screenshot PATH --frames N`.
 | Logo hold: the UBER card at full screen, the wireframe dimmed | Fade transition between logo and black break |
 | ![Art: ink filaments](docs/screenshots/8-art-ink-filaments.jpg) | ![Art: cracked glass](docs/screenshots/9-art-glass-voronoi.jpg) |
 | Black-break art layer: neon ink filaments | Black-break art layer: beat-lit cracked glass |
+| ![Scroller](docs/screenshots/10-scroller-fixed.jpg) | ![Klein bottle](docs/screenshots/5-klein-bottle.jpg) |
+| Beat-synced scroller ticker at the bottom | Klein bottle |
 | ![Klein bottle](docs/screenshots/5-klein-bottle.jpg) | ![Dini surface](docs/screenshots/6-dini-surface.jpg) |
 | Klein bottle immersion | Dini surface |
 
@@ -217,6 +219,9 @@ See `docs/EFFECTS.md` for the implemented effect catalogue.
 - **Weak GPU**: use `--quality 0.5` or `--no-post`.
 
 ## Release notes
+### v4.29
+- Fixed the text scroller: it was upside-down at the top of the screen with corrupted glyphs (inconsistent font table, wrong code-strip texel mapping, inexact `pow(2,bit)`). It is now a crisp ticker at the bottom with a clean 5x7 font.
+
 ### v4.28
 - Arty procedural background layer and anamorphic streak / light-ray eye candy in the post pass; new `uLogoVis` uniform fades them against the logo show.
 
