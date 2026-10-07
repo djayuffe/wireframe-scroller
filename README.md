@@ -1,25 +1,47 @@
 # Impossible Wireframe
 
-C++20 / OpenGL 4.1 Core wireframe demoscene for macOS, Linux, and Windows, focused on mathematically unusual geometry, HDR-style shader compositing, and tracker-music-reactive motion. The project packages the audited impossible-wireframe design as a standalone public repo with tests, provenance, screenshots, and bundled demo music.
+![Impossible Wireframe: 600-cell over the UBER logo](docs/screenshots/1-logo-hold-600cell.jpg)
 
-Copyright (c) 2026 Ulf Bertilsson. Code is MIT licensed.
+**A real-time wireframe demoscene in C++20 and OpenGL 4.1 Core** for macOS, Linux and Windows. It renders 51 mathematically unusual objects, from exact 4D polychora to minimal surfaces, strange attractors and procedurally discovered shapes. A HDR post pass composites them over a full-screen logo show, and a tracker module drives the motion.
 
+Copyright (c) 2026 Ulf Bertilsson. Code is MIT licensed. Tags: `wireframe` `demoscene` `opengl` `glfw` `cpp20` `4d-geometry` `procedural-geometry` `shaders` `libopenmpt` `tracker-music` `creative-coding` `macos`.
+
+## Highlights
+- **51 scenes**: the 600-cell, its exact face-plane slice, the dual 120-cell, tesseract, Hopf fibres, Boy surface, Klein bottle, Dini surface, TPMS, Clifford torus, quaternion-Julia slice, Lissajous and chaotic attractors, and 10 procedural "unknown lab" objects.
+- **Effect engine**: 64 CPU vertex-warper effects, 24 curated multi-stage recipes and a deterministic mutation generator. Every stage is fail-safe, so a bad combination restores the previous mesh instead of blanking the scene.
+- **Logo show**: 20 full-screen UBER cards fade in, hold for a few seconds, fade out, then give way to a long black break where the wireframe has the screen to itself.
+- **HDR pipeline**: RGBA16F target, additive line blending, bloom, lensing, chromatic aberration, glitch slices, grain and an ACES tone map. Logo-aware gain keeps wires readable and the logo unwashed.
+- **Music-reactive**: SDL2 and libopenmpt play a bundled public-domain MOD. Bass, mid and treble bands drive glow, bloom and the effect system. Without audio, a deterministic BPM clock takes over.
+- **Tested**: geometry validity, canonical V/E/F counts, a recipe-validity regression over every recipe, and timeline math, all built with `-Wall -Wextra -Wpedantic -Werror`.
 
 ## Screenshots
+Captured with `--window 960x540 --screenshot PATH --frames N`.
 
-![Impossible Wireframe scene](scene.png)
-![Impossible Wireframe alternate scene](scene2.png)
-![Impossible Wireframe shader scene](scene3.png)
+| | |
+|---|---|
+| ![Hopf fibres](docs/screenshots/2-hopf-fibres.jpg) | ![Discovered object](docs/screenshots/4-discovered-object.jpg) |
+| Hopf fibres, warped by an effect recipe, with travelling octahedra | Seeded harmonic "discovered object" under heavy effect layering |
+| ![Logo crystal](docs/screenshots/3-logo-crystal.jpg) | ![Fade transition](docs/screenshots/7-fade-transition.jpg) |
+| Logo hold: the UBER card at full screen, the wireframe dimmed | Fade transition between logo and black break |
+| ![Klein bottle](docs/screenshots/5-klein-bottle.jpg) | ![Dini surface](docs/screenshots/6-dini-surface.jpg) |
+| Klein bottle immersion | Dini surface |
 
 ## Implemented scenes
-The show now contains 51 validated scenes. Exact/derived scenes include the
-600-cell projection, exact 600-cell face-plane slice and dual-derived 120-cell
-projection. Parametric/numerical scenes include TPMS surfaces, Hopf fibres, Boy
-surface, superformula, Clifford torus, quaternion-Julia boundary slice,
-Lissajous and chaotic attractors, 25 v4 exotic geometry families and 10 ported
-unknown-lab procedural wire objects.
+The show contains 51 validated scenes. Exact or derived scenes include the 600-cell projection, the exact 600-cell face-plane slice and the dual-derived 120-cell projection. Parametric and numerical scenes include TPMS surfaces, Hopf fibres, Boy surface, superformula, Clifford torus, quaternion-Julia boundary slice, Lissajous and chaotic attractors, 25 v4 exotic geometry families and 10 ported unknown-lab procedural wire objects.
 
-`data/object_catalog.csv` records provenance. The hyperbolic and quaternion scenes are visualizations, not claimed canonical honeycomb/fractal meshes.
+`data/object_catalog.csv` records provenance. The hyperbolic and quaternion scenes are visualizations, not claimed canonical honeycomb or fractal meshes.
+
+## Logo show timing
+The logo cycle is time-driven and independent of the scene sequencer, 14.5 s per card:
+
+| Phase | Duration |
+|---|---|
+| Fade in | 1.0 s |
+| Hold | 3.5 s |
+| Fade out | 1.0 s |
+| Black break | 9.0 s |
+
+During the hold, wire gain and post-pass exposure are reduced slightly so the logo stays rich and the wireframe stays visible. During the black break the wireframe is shown at full gain.
 
 ## Build
 The build system is CMake. A `Makefile` wraps it for convenience — the
@@ -106,7 +128,7 @@ If OpenGL/GLFW are absent, CMake still builds `iw_geometry` and `geometry_tests`
 
 ## Visual layers
 The renderer composites four layers, back to front:
-1. **Logo backdrop** — the 20 `UBER_Fullscreen_Logo_Pack/UBER_*_1920x1080.jpg`
+1. **Logo backdrop** — on the timed show above, the 20 `UBER_Fullscreen_Logo_Pack/UBER_*_1920x1080.jpg`
    cards as a full-screen texture, drawn FIRST (as the opaque background) into
    the HDR buffer so the wireframe + travelers glow additively on top. It
    crossfades as the scene changes and has a subtle Ken Burns zoom +
@@ -183,3 +205,18 @@ Project targets compile with `-Wall -Wextra -Wpedantic -Werror` (or `/W4 /WX`). 
 
 See `design.md` for mathematical provenance and design constraints.
 See `docs/EFFECTS.md` for the implemented effect catalogue.
+
+## Troubleshooting
+- **Shader edits have no effect**: shaders are copied to `build/shaders` at build time, so run `make` after editing them.
+- **Static GLFW link errors on macOS**: CMake searches for `glfw` and `glfw3` and adds the Apple frameworks when linking statically.
+- **No audio**: install SDL2 and libopenmpt (`brew install sdl2 libopenmpt`). Without them the demo runs on the BPM clock.
+- **Weak GPU**: use `--quality 0.5` or `--no-post`.
+
+## Release notes
+### v4.27
+- Fixed hangs: a false GLFW context-lost check caused per-frame reinitialisation, and a rejected mesh with duplicate edges ended the show. `sanitize()` now removes duplicate, self and out-of-range edges, with a regression test.
+- Logo now renders the right way round and fills the screen.
+- New timed logo show with fades and long black breaks.
+- Wire gain scaled by edge count, and a reduced bloom, exposure and gamma lift over the logo, so the logo and wireframe are no longer washed out.
+- `--screenshot` now flushes stale GL errors, and `--frames N` captures on frame N.
+- macOS fixes: no `glTexStorage2D` (GL 4.2), GLFW static link.
