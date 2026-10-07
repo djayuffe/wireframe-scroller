@@ -219,6 +219,9 @@ See `docs/EFFECTS.md` for the implemented effect catalogue.
 - **Weak GPU**: use `--quality 0.5` or `--no-post`.
 
 ## Release notes
+### v4.30
+- Same as v4.29 plus the scroller shader test updated to match the fix (v4.29 shipped with that test failing).
+
 ### v4.29
 - Fixed the text scroller: it was upside-down at the top of the screen with corrupted glyphs (inconsistent font table, wrong code-strip texel mapping, inexact `pow(2,bit)`). It is now a crisp ticker at the bottom with a clean 5x7 font.
 
