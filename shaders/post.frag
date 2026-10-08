@@ -95,6 +95,29 @@ vec3 blob3D(vec2 p,float ml,float beat){
   col+=pal(t*.04+tt*.1)*glow*.045*(.5+ml);
   return col*smoothstep(2.6,.3,length(p));
 }
+
+// Julia-set glow: orbit-trap fractal that slowly morphs its constant.
+float juliaTrap(vec2 z,float t){
+  vec2 c=.7885*vec2(cos(t*.13),sin(t*.17))*(.92+.08*sin(t*.4));
+  float trap=1e3;float it=0.;
+  for(int i=0;i<24;i++){
+    z=vec2(z.x*z.x-z.y*z.y,2.*z.x*z.y)+c;
+    trap=min(trap,abs(length(z)-.9+.25*sin(t+float(i)))*1.0);
+    if(dot(z,z)>16.)break;it+=1.;
+  }
+  return exp(-trap*5.)*(.4+.6*it/24.);
+}
+// Op-art interference: two drifting ring systems make moire fringes.
+float moire(vec2 p,float t){
+  vec2 a=p-.55*vec2(cos(t*.21),sin(t*.17)),b=p+.55*vec2(sin(t*.19),cos(t*.23));
+  return pow(.5+.5*sin(length(a)*46.+t)*sin(length(b)*46.-t*.8),3.);
+}
+// Turing-like spots/stripes from three rotated sine fields (cheap reaction-diffusion look).
+float turing(vec2 p,float t){
+  float v=0.;
+  for(int i=0;i<3;i++){float a=float(i)*2.0944+t*.03;v+=cos(dot(p,vec2(cos(a),sin(a)))*9.+sin(t*.2+float(i))*2.);}
+  return smoothstep(.4,1.4,v)*smoothstep(3.,1.8,v+.6);
+}
 vec3 artLayer(vec2 p,float ml,float beat){
   // Breathing, uneven morph: the whole field swells and shears like living tissue.
   float breath=.5+.5*sin(uTime*.55)+.6*beat*.3;
@@ -120,6 +143,13 @@ vec3 artLayer(vec2 p,float ml,float beat){
   float rose=pow(.5+.5*sin(kp.x*14.-t*.9+sin(kp.y*9.+t*.4)*2.),22.)
             +pow(.5+.5*sin(kp.y*11.+t*.7+kp.x*4.),30.);
   c+=w2*pal(r*.2-t*.03)*rose*(.35+.9*ml);
+  // D: orbit-trap Julia fractal, E: moire op-art, F: Turing spots; they surface in slow waves.
+  float wD=smoothstep(.2,.9,.5+.5*sin(t*.07+1.));
+  float wE=smoothstep(.45,.95,.5+.5*sin(t*.09+3.));
+  float wF=smoothstep(.45,.95,.5+.5*sin(t*.06+5.));
+  c+=wD*pal(t*.03+r*.15)*juliaTrap(p*1.25,t)*(.5+.9*ml);
+  c+=wE*pal(t*.05+p.x*.1)*moire(p,t)*(.28+.6*ml);
+  c+=wF*pal(t*.04-p.y*.1)*turing(p,t)*(.3+.7*ml+.5*beat);
   // soft iridescent mist so the dark never goes flat
   c+=pal(fbm(p*.9+t*.02)+t*.01)*.035*(.6+ml);
   // Uneven, drifting light pools: some regions glow while others sink into darkness.
@@ -171,6 +201,21 @@ void main(){
   { vec2 bp=suv-.5; float r2=dot(bp,bp);
     suv=.5+bp*(1.0+(.02+.05*beat)*r2*(1.0-hasLogo)); }
 
+
+  // --- Wild shader events: one warp at a time, picked every 6 s with a smooth envelope ----
+  float wslot=floor(uTime/6.0);
+  int wid=int(hash(vec2(wslot,7.3))*7.0);
+  float wenv=pow(sin(3.14159265*fract(uTime/6.0)),.7)*(1.0-hasLogo);
+  float wamt=wenv*(.55+.45*beat+.4*mlev);
+  { vec2 wp=suv-.5;float wr=length(wp);
+    if(wid==0){ float a=wamt*2.4*exp(-wr*2.6);float c0=cos(a),s0=sin(a);suv=.5+mat2(c0,-s0,s0,c0)*wp; }            // swirl / twirl
+    else if(wid==1){ suv+=normalize(wp+1e-4)*sin(wr*38.-uTime*7.)*.012*wamt; }                                       // radial ripples
+    else if(wid==2){ float ka=atan(wp.y,wp.x),seg=6.2831853/6.;ka=abs(mod(ka,seg)-seg*.5);suv=mix(suv,.5+vec2(cos(ka),sin(ka))*wr,min(wamt,1.)); }  // kaleidoscope fold
+    else if(wid==3){ float cells=mix(900.,60.,min(wamt,1.));suv=mix(suv,(floor(suv*cells)+.5)/cells,min(wamt,1.)); }   // mosaic crunch
+    else if(wid==4){ vec2 bk=floor(suv*vec2(14.,9.));float hb=hash(bk+floor(uTime*9.));suv.x+=(step(.82,hb)*(hb-.9)*.9)*wamt; }  // datamosh block shift
+    else if(wid==5){ suv+=vec2(sin(suv.y*18.+uTime*3.),cos(suv.x*16.-uTime*2.6))*.014*wamt; }                       // liquid wobble
+    else { suv=mix(suv,.5+vec2(wp.x,abs(wp.y))*vec2(1.,1.),min(wamt,1.)*.8); }                                     // mirror horizon
+    suv=clamp(suv,0.0,1.0); }
   // 4) Chromatic aberration (sample R/B at offset UVs, driven by pulse).
   vec2 ca=(suv-.5)*(.002+.006*beat)*(1.0-hasLogo);
   vec3 scene=vec3(texture(uScene,suv+ca).r,texture(uScene,suv).g,texture(uScene,suv-ca).b);
@@ -269,6 +314,18 @@ void main(){
   // The logo card is already a finished 0..1 picture: expose it lower and skip the mid-tone lift
   // (pow < 1 brightens), or its silver letters burn out to white under the additive wires and bloom.
   hdr=aces(hdr*(.92+.38*mlev)*mix(1.0,.74,hasLogo));
+
+  // --- Wild colour grading (black breaks only): hue drift, solarize on the downbeat, neon posterize ---
+  { float k=1.0-hasLogo;
+    float ha=uTime*.12*k;float ch=cos(ha),sh=sin(ha);
+    mat3 hue=mat3(.299+.701*ch+.168*sh,.299-.299*ch-.328*sh,.299-.3*ch+1.25*sh,
+                  .587-.587*ch+.33*sh,.587+.413*ch+.035*sh,.587-.588*ch-1.05*sh,
+                  .114-.114*ch-.497*sh,.114-.114*ch+.292*sh,.114+.886*ch-.203*sh);
+    hdr=mix(hdr,hue*hdr,k);
+    float sol=beat*(wid==3?0.:1.)*k*.35*(.4+mlev);
+    hdr=mix(hdr,abs(hdr-.5)*2.,sol);
+    float pst=smoothstep(.55,.95,sin(uTime*.31))*k*.5;
+    hdr=mix(hdr,floor(hdr*5.+.5)/5.,pst); }
   hdr=(hdr-.5)*1.075+.5;
   hdr=pow(max(hdr,0.),vec3(mix(.86,1.0,hasLogo)));
   FragColor=vec4(hdr,1);

@@ -12,6 +12,7 @@ Copyright (c) 2026 Ulf Bertilsson. Code is MIT licensed. Tags: `wireframe` `demo
 - **Logo show**: 20 full-screen UBER cards fade in, hold for a few seconds, fade out, then give way to a long black break where the wireframe has the screen to itself.
 - **Arty black breaks**: when the logo is away, a procedural art layer fades in (domain-warped neon ink, beat-lit cracked-glass Voronoi, kaleidoscopic rose rings), slowly cross-fading between styles.
 - **Living 3D background**: a raymarched metaball organism that melts and breathes with the music, over uneven, morphing art fields.
+- **Wild shader events**: timed swirl, ripple, kaleidoscope, mosaic, datamosh and liquid warps with hue drift and solarize flashes on the downbeat.
 - **Eye candy**: anamorphic blue lens streaks and radial light rays from bright wires, plus lensing, shockwave and chromatic aberration that fade in as the logo fades out.
 - **HDR pipeline**: RGBA16F target, additive line blending, bloom, lensing, chromatic aberration, glitch slices, grain and an ACES tone map. Logo-aware gain keeps wires readable and the logo unwashed.
 - **Music-reactive**: SDL2 and libopenmpt play a bundled public-domain MOD. Bass, mid and treble bands drive glow, bloom and the effect system. Without audio, a deterministic BPM clock takes over.
@@ -32,6 +33,8 @@ Captured with `--window 960x540 --screenshot PATH --frames N`.
 | Beat-synced scroller ticker at the bottom | Klein bottle immersion |
 | ![Dini surface](docs/screenshots/6-dini-surface.jpg) | ![3D organism](docs/screenshots/11-3d-organism.jpg) |
 | Dini surface | Breathing 3D metaball organism in the black break |
+| ![Swirl and moire](docs/screenshots/12-wild-swirl-moire.jpg) | ![Mosaic crunch](docs/screenshots/13-wild-mosaic.jpg) |
+| Swirl warp over fractal and moire layers | Mosaic crunch event with hue drift |
 
 ## Implemented scenes
 The show contains 51 validated scenes. Exact or derived scenes include the 600-cell projection, the exact 600-cell face-plane slice and the dual-derived 120-cell projection. Parametric and numerical scenes include TPMS surfaces, Hopf fibres, Boy surface, superformula, Clifford torus, quaternion-Julia boundary slice, Lissajous and chaotic attractors, 25 v4 exotic geometry families and 10 ported unknown-lab procedural wire objects.
@@ -220,6 +223,9 @@ See `docs/EFFECTS.md` for the implemented effect catalogue.
 - **Weak GPU**: use `--quality 0.5` or `--no-post`.
 
 ## Release notes
+### v4.33
+- Wild shader events: every 6 s one warp takes over (swirl, radial ripples, kaleidoscope fold, mosaic crunch, datamosh block shift, liquid wobble, mirror horizon), plus hue drift, downbeat solarize and neon posterize bursts. Three new art styles: orbit-trap Julia fractal, op-art moire, Turing spots.
+
 ### v4.32
 - Living background: a raymarched 3D metaball organism that melts, breathes with the beat and music, and is lit with fresnel and specular; the whole art field now swells and shears like tissue, with drifting light pools for an uneven look.
 
