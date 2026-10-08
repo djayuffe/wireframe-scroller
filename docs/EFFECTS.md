@@ -76,3 +76,14 @@ This avoids uploading textures or spawning extra framebuffers while still adding
 depth behind the wireframe: sparse stars, diagonal glimmer, aurora bands,
 music-reactive matrix streaks, a layered pseudo-3D tunnel, vignette and HDR tone
 mapping all happen in the same composite shader.
+
+## Showpiece scenes (51-56)
+
+Clean, readable 3D objects added in v4.34. They skip the procedural mutation overlay and get a "Pure form" window (about 40 % of every ~12 s cycle) where no effect recipe is applied at all:
+
+- **Geodesic dome** - subdivided icosahedron with a breathing surface bump.
+- **Tube trefoil** - trefoil knot swept into a wire tube with twisting cross-section rings.
+- **DNA helix** - two backbones with base-pair rungs and an animated twist.
+- **Atom orbits** - geodesic nucleus, three tilted electron rings and octahedral electrons.
+- **Wave terrain** - rippling wire ocean (radial wave plus a cross-wave), tilted toward the camera.
+- **Platonic compound** - icosahedron, its dual dodecahedron and a pulsing stella octangula.
