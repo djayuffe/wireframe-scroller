@@ -56,7 +56,51 @@ float inkFlow(vec2 p,float t){
   float v=fbm(p+3.*r);
   return 1.-abs(2.*v-1.);
 }
+
+// ---- 3D morphing metaball organism (raymarched, breathing) ------------------
+float blobSdf(vec3 q,float t,float br){
+  float d=1e3;
+  for(int i=0;i<5;i++){
+    float fi=float(i);
+    vec3 c=vec3(sin(t*.31+fi*1.9)*1.15,cos(t*.27+fi*2.3)*.8,sin(t*.23+fi*1.1)*.9);
+    float r=(.42+.12*sin(t*.5+fi*2.))*br;
+    float s=length(q-c)-r;
+    float k=.55;float h=clamp(.5+.5*(d-s)/k,0.,1.);d=mix(d,s,h)-k*h*(1.-h);   // smooth union: they melt into each other
+  }
+  // organic surface undulation that breathes with the music
+  d+=.05*sin(q.x*5.+t*.9)*sin(q.y*4.7-t*.7)*sin(q.z*5.3+t*.6);
+  return d;
+}
+vec3 blob3D(vec2 p,float ml,float beat){
+  float t=uTime;
+  float br=1.0+.10*sin(t*.9)+.10*beat+.14*ml;               // breathing
+  vec3 ro=vec3(sin(t*.12)*.8,cos(t*.09)*.5,-3.6),rd=normalize(vec3(p*.62,1.5));
+  float a=t*.07;rd.xz=mat2(cos(a),-sin(a),sin(a),cos(a))*rd.xz;ro.xz=mat2(cos(a),-sin(a),sin(a),cos(a))*ro.xz;
+  float tt=0.,d=0.;vec3 q=ro;float glow=0.;
+  for(int i=0;i<26;i++){
+    q=ro+rd*tt;d=blobSdf(q,t,br);
+    glow+=.018/(.06+abs(d));                                  // volumetric halo
+    if(d<.01||tt>7.)break;
+    tt+=d*.85;
+  }
+  vec3 col=vec3(0);
+  if(d<.05){
+    vec2 e=vec2(.02,0);
+    vec3 n=normalize(vec3(blobSdf(q+e.xyy,t,br)-blobSdf(q-e.xyy,t,br),blobSdf(q+e.yxy,t,br)-blobSdf(q-e.yxy,t,br),blobSdf(q+e.yyx,t,br)-blobSdf(q-e.yyx,t,br)));
+    vec3 L=normalize(vec3(-.5,.7,-.6));
+    float dif=max(dot(n,L),0.),fres=pow(1.-max(dot(n,-rd),0.),3.);
+    float spec=pow(max(dot(reflect(-L,n),-rd),0.),24.);
+    col=pal(q.y*.25+t*.03+dot(n,vec3(.3))+.2)*(.12+.75*dif)+pal(fres+t*.05)*fres*.95+vec3(1.,.9,.8)*spec*.5;
+  }
+  col+=pal(t*.04+tt*.1)*glow*.045*(.5+ml);
+  return col*smoothstep(2.6,.3,length(p));
+}
 vec3 artLayer(vec2 p,float ml,float beat){
+  // Breathing, uneven morph: the whole field swells and shears like living tissue.
+  float breath=.5+.5*sin(uTime*.55)+.6*beat*.3;
+  p+=.07*vec2(sin(p.y*2.3+uTime*.4),cos(p.x*2.0-uTime*.33))*(.6+breath)+.05*ml*vec2(sin(uTime*1.3+p.y*4.),cos(uTime*1.1+p.x*4.));
+  p*=1.0+.06*breath;
+  vec3 organism=blob3D(p,ml,beat);
   float t=uTime;
   // Three styles cross-fade slowly so the break never looks the same twice.
   float w0=.5+.5*sin(t*.11),w1=.5+.5*sin(t*.11+2.094),w2=.5+.5*sin(t*.11+4.189);
@@ -78,7 +122,9 @@ vec3 artLayer(vec2 p,float ml,float beat){
   c+=w2*pal(r*.2-t*.03)*rose*(.35+.9*ml);
   // soft iridescent mist so the dark never goes flat
   c+=pal(fbm(p*.9+t*.02)+t*.01)*.035*(.6+ml);
-  return c*smoothstep(2.4,.2,r)*.9;
+  // Uneven, drifting light pools: some regions glow while others sink into darkness.
+  float pools=smoothstep(.15,.85,fbm(p*.7+vec2(uTime*.04,-uTime*.03)));
+  return (c*smoothstep(2.4,.2,r)*.9)*(.25+1.5*pools)+organism*(.55+.45*pools);
 }
 
 void main(){
@@ -172,7 +218,7 @@ void main(){
   float glimmer=pow(max(0.,sin((p.x*23.-p.y*17.)+uTime*(2.2+uMusicLevel*3.))),28.)*
                 smoothstep(.15,1.6,length(p))*(.03+.13*uMusicLevel);
   vec3 bg=vec3(.0015,.003,.013);
-  bg+=artLayer(p,mlev,beat)*.38*pow(1.0-hasLogo,3.0);
+  bg+=artLayer(p,mlev,beat)*.52*pow(1.0-hasLogo,3.0);
   bg+=pal(n*.32+uTime*.015)*neb;
   bg+=pal(p.y*.08+uTime*.035+n2*.15)*aurora*(.045+.16*uMusicLevel);
   bg+=vec3(.35,.55,1.2)*(star*.22+grid);

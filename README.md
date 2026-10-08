@@ -11,6 +11,7 @@ Copyright (c) 2026 Ulf Bertilsson. Code is MIT licensed. Tags: `wireframe` `demo
 - **Effect engine**: 64 CPU vertex-warper effects, 24 curated multi-stage recipes and a deterministic mutation generator. Every stage is fail-safe, so a bad combination restores the previous mesh instead of blanking the scene.
 - **Logo show**: 20 full-screen UBER cards fade in, hold for a few seconds, fade out, then give way to a long black break where the wireframe has the screen to itself.
 - **Arty black breaks**: when the logo is away, a procedural art layer fades in (domain-warped neon ink, beat-lit cracked-glass Voronoi, kaleidoscopic rose rings), slowly cross-fading between styles.
+- **Living 3D background**: a raymarched metaball organism that melts and breathes with the music, over uneven, morphing art fields.
 - **Eye candy**: anamorphic blue lens streaks and radial light rays from bright wires, plus lensing, shockwave and chromatic aberration that fade in as the logo fades out.
 - **HDR pipeline**: RGBA16F target, additive line blending, bloom, lensing, chromatic aberration, glitch slices, grain and an ACES tone map. Logo-aware gain keeps wires readable and the logo unwashed.
 - **Music-reactive**: SDL2 and libopenmpt play a bundled public-domain MOD. Bass, mid and treble bands drive glow, bloom and the effect system. Without audio, a deterministic BPM clock takes over.
@@ -29,8 +30,8 @@ Captured with `--window 960x540 --screenshot PATH --frames N`.
 | Black-break art layer: neon ink filaments | Black-break art layer: beat-lit cracked glass |
 | ![Scroller](docs/screenshots/10-scroller-fixed.jpg) | ![Klein bottle](docs/screenshots/5-klein-bottle.jpg) |
 | Beat-synced scroller ticker at the bottom | Klein bottle immersion |
-| ![Dini surface](docs/screenshots/6-dini-surface.jpg) | |
-| Dini surface | |
+| ![Dini surface](docs/screenshots/6-dini-surface.jpg) | ![3D organism](docs/screenshots/11-3d-organism.jpg) |
+| Dini surface | Breathing 3D metaball organism in the black break |
 
 ## Implemented scenes
 The show contains 51 validated scenes. Exact or derived scenes include the 600-cell projection, the exact 600-cell face-plane slice and the dual-derived 120-cell projection. Parametric and numerical scenes include TPMS surfaces, Hopf fibres, Boy surface, superformula, Clifford torus, quaternion-Julia boundary slice, Lissajous and chaotic attractors, 25 v4 exotic geometry families and 10 ported unknown-lab procedural wire objects.
@@ -219,6 +220,9 @@ See `docs/EFFECTS.md` for the implemented effect catalogue.
 - **Weak GPU**: use `--quality 0.5` or `--no-post`.
 
 ## Release notes
+### v4.32
+- Living background: a raymarched 3D metaball organism that melts, breathes with the beat and music, and is lit with fresnel and specular; the whole art field now swells and shears like tissue, with drifting light pools for an uneven look.
+
 ### v4.31
 - First release where the scroller fix and the updated shader test are both in and the suite passes. v4.29 and v4.30 were tagged with that one test failing.
 
