@@ -52,7 +52,7 @@ static std::vector<std::filesystem::path> logoCandidates(const std::filesystem::
 
 int main(int argc,char**argv){
    double bpm=132.0;std::filesystem::path musicPath,logoOverride;bool noScroller=false,noPost=false;
-   bool haveRecipe=false; int recipeArg=0;  // haveRecipe=false -> auto mode
+   int sceneArg=-1; bool haveRecipe=false; int recipeArg=0;  // haveRecipe=false -> auto mode
    double quality=1.0;  // render scale: the HDR target is W*quality x H*quality
    int winW=0,winH=0; bool fullscreen=false;  // --window WxH / --fullscreen
    std::string screenshotPath; int maxFrames=0;  // --screenshot PATH / --frames N
@@ -70,13 +70,14 @@ int main(int argc,char**argv){
        winW=ww;winH=wh;
       }
     else if(arg=="--fullscreen")fullscreen=true;
+    else if(arg=="--scene"&&i+1<argc){sceneArg=std::atoi(argv[++i]);}
     else if(arg=="--recipe"&&i+1<argc){recipeArg=std::atoi(argv[++i]);haveRecipe=true;}
-    else if(arg=="--version"){std::fprintf(stdout,"Impossible Wireframe v4.33\n");return 0;}
+    else if(arg=="--version"){std::fprintf(stdout,"Impossible Wireframe v4.34\n");return 0;}
     else if(arg=="--screenshot"&&i+1<argc){screenshotPath=argv[++i];}
     else if(arg=="--frames"&&i+1<argc){maxFrames=std::max(0,std::atoi(argv[++i]));}
     else if(arg=="--help"||arg=="-h"){
       std::fprintf(stdout,
-        "Impossible Wireframe v4.33\n"
+        "Impossible Wireframe v4.34\n"
         "Usage: impossible_wireframe [options]\n"
         "  --bpm N         Tempo (default 132)\n"
         "  --music PATH    Audio module/wav to play (default: assets/music if present)\n"
@@ -85,6 +86,7 @@ int main(int argc,char**argv){
         "  --quality F     Render the HDR target at F of screen resolution (0.25-1.0,\n"
         "                  default 1.0; lower = faster on weak GPUs)\n"
         "  --logos DIR     Directory of UBER_*_1920x1080.jpg logo cards\n"
+        "  --scene N       Start on scene N in manual mode (0-56; Space returns to auto)\n"
         "  --recipe N      Start in recipe mode with curated recipe N (0-23)\n"
         "  --window WxH    Initial window size, e.g. --window 1920x1080\n"
         "                  (default 1440x900; 320x200 .. 3840x2160)\n"
@@ -127,7 +129,7 @@ int main(int argc,char**argv){
   } else {
     cw=winW>0?winW:1440; ch=winH>0?winH:900;
   }
-  GLFWwindow*w=glfwCreateWindow(cw,ch,"Impossible Wireframe v4.33",mon,nullptr);
+  GLFWwindow*w=glfwCreateWindow(cw,ch,"Impossible Wireframe v4.34",mon,nullptr);
   if(!w){std::fprintf(stderr,"OpenGL 4.1 context creation failed\n");glfwTerminate();return 2;}
   if(fullscreen)glfwSetWindowMonitor(w,mon,0,0,cw,ch,vm?vm->refreshRate:0);
   glfwMakeContextCurrent(w);glfwSwapInterval(fullscreen?0:1);  // uncapped in fullscreen
@@ -166,7 +168,7 @@ int main(int argc,char**argv){
        for(auto& c:candidates){ if(r.loadLogos(c.string())){ loaded=true; std::fprintf(stdout,"logos: %d cards from %s\n",r.logoCount(),c.string().c_str()); break; } }
        if(!loaded){ std::fprintf(stderr,"warning: no UBER_Fullscreen_Logo_Pack found; tried:\n"); for(auto& c:candidates)std::fprintf(stderr,"  %s\n",c.string().c_str()); std::fprintf(stderr,"  -> running without logo background\n"); }
      }
- Timeline timeline(bpm);SceneSystem scenes;uint64_t seed=0x49574f424a454354ull;int manual=-1,lastScene=-1,lastUploadScene=-1;bool prevL=false,prevR=false;const Mesh3* lastMesh=nullptr;std::tuple<size_t,size_t,float> lastMeshSig{0,0,-1.f};
+ Timeline timeline(bpm);SceneSystem scenes;uint64_t seed=0x49574f424a454354ull;int manual=sceneArg,lastScene=-1,lastUploadScene=-1;bool prevL=false,prevR=false;const Mesh3* lastMesh=nullptr;std::tuple<size_t,size_t,float> lastMeshSig{0,0,-1.f};
     bool scrollerOn=!noScroller;
     // Per-scene effect recipe (the lab's 24 curated recipes) with an optional
     // procedural "mutation" rotation. R toggles recipe mode, +/- cycle it.
@@ -214,7 +216,7 @@ int main(int argc,char**argv){
       if(music.active){ ec.bass=music.bass; ec.mid=music.mid; ec.treble=music.treble; }
       else { ec.bass=.5f+.5f*std::sin(float(showSeconds)*2.0f); ec.mid=.5f+.5f*std::sin(float(showSeconds)*3.3f+1.1f); ec.treble=.5f+.5f*std::sin(float(showSeconds)*5.7f+2.3f); }
       ec.seed=baseSeed+uint32_t(scene)*131u;
-      EffectRecipe rc;
+      EffectRecipe rc; bool cleanShowpiece=false;
       lastRecipeName="";  // reset; filled below
       if(recipeMode){ rc=recipe(recipeChoice); }
       else if(haveRecipe){ rc=recipe(recipeArg%recipeCount()); }
@@ -229,7 +231,10 @@ int main(int argc,char**argv){
         rc=EffectRecipe{}; rc.name="Auto";
         int i=0;
         for(int k=0;k<base.stageCount&&i<6;k++)rc.stages[i++]=base.stages[k];
-        for(int k=0;k<mut.stageCount&&i<6;k++)rc.stages[i++]=mut.stages[k];
+        // Showpiece objects (scene >= 51) are meant to be read as clean shapes: no mutation overlay,
+        // and the warp swells in and out so the pure object is visible for part of every ~12 s cycle.
+        if(scene>=51){ float env=.5f-.5f*std::cos(float(showSeconds)*.52f); cleanShowpiece=env<.45f; ec.amount*=.25f+.75f*env; }
+        else for(int k=0;k<mut.stageCount&&i<6;k++)rc.stages[i++]=mut.stages[k];
         rc.stageCount=i;
       }
       lastRecipeName=std::string(rc.name);
@@ -239,7 +244,7 @@ int main(int argc,char**argv){
       const Mesh3* secondary=nullptr;
       for(int k=0;k<rc.stageCount;k++)
         if(rc.stages[k].useSecondary){ secondary=m.v.empty()?nullptr:&scenes.mesh((scene+1)%scenes.count(),showSeconds,seed); break; }
-      applyRecipe(m,rc,ec,secondary);
+      if(cleanShowpiece&&!recipeMode&&!haveRecipe){ lastRecipeName="Pure form"; } else applyRecipe(m,rc,ec,secondary);
     }
     // geo::stats() scans every vertex + edge to compute the radius; on a dense
     // scene (the 600-cell projection is ~1200 edges, a subdivided recipe can be

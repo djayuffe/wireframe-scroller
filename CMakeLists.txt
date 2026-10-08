@@ -74,7 +74,7 @@ function(iw_warnings target)
 endfunction()
 
 # --- Core library (geometry / scenes / effects / font / image) -------------
-add_library(iw_geometry src/Geometry.cpp src/AdvancedGeometry.cpp src/Timeline.cpp src/Scene.cpp src/TextScroller.cpp src/Image.cpp src/Effects.cpp)
+add_library(iw_geometry src/Geometry.cpp src/AdvancedGeometry.cpp src/Timeline.cpp src/Scene.cpp src/ShowpieceGeometry.cpp src/TextScroller.cpp src/Image.cpp src/Effects.cpp)
 target_include_directories(iw_geometry PUBLIC include thirdparty)
 iw_warnings(iw_geometry)
 

@@ -50,3 +50,9 @@ id,name,class,provenance,vertices_or_resolution,notes
 48,Unknown knot lattice 13,procedural lab port,unknown_wireframe_lab_v4_49_objects,curve bundle,ported higher-order knot lattice
 49,Unknown golden spiral skeleton,procedural lab port,unknown_wireframe_lab_v4_49_objects,spiral arms,ported golden spiral skeleton
 50,Unknown twisted ruled shell,procedural lab port,unknown_wireframe_lab_v4_49_objects,ruled surface,ported twisted ruled shell
+51,Geodesic dome,showpiece,icosphere subdivision,triangle lattice,breathing bump
+52,Tube trefoil,showpiece,parametric knot swept tube,ring/longitudinal wires,Frenet-style frame
+53,DNA helix,showpiece,double helix,rungs,animated twist
+54,Atom orbits,showpiece,nucleus + 3 electron rings,rings + octahedra,orbiting electrons
+55,Wave terrain,showpiece,height-field grid,wire ocean,animated ripples
+56,Platonic compound,showpiece,icosahedron + dodecahedron + stella octangula,compound,pulsing inner cube pair

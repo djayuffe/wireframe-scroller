@@ -1,10 +1,11 @@
 #include "Scene.hpp"
 #include "AdvancedGeometry.hpp"
+#include "ShowpieceGeometry.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
 namespace {
-constexpr std::array<SceneInfo,51> S{{
+constexpr std::array<SceneInfo,57> S{{
  {0,"600-cell projection",true,60,"exact 600-cell + 4D projection"},{1,"600-cell slice",true,30,"exact face/hyperplane intersection"},
  {2,"Gyroid",true,6,"numerical implicit"},{3,"Schwarz P",true,6,"numerical implicit"},{4,"Schwarz D",true,6,"numerical implicit"},{5,"Neovius",true,6,"numerical implicit"},
  {6,"Hopf fibres",false,1,"parametric S3 stereographic projection"},{7,"Boy surface",false,1,"analytic immersion"},{8,"Superformula",true,15,"parametric"},
@@ -16,7 +17,10 @@ constexpr std::array<SceneInfo,51> S{{
  {43,"Unknown phyllotaxis vortex",true,12,"ported unknown-wireframe-lab procedural object"},{44,"Unknown ruled singularity fan",true,12,"ported unknown-wireframe-lab procedural object"},
  {45,"Unknown prime-lobed lantern",true,12,"ported unknown-wireframe-lab procedural object"},{46,"Unknown aperiodic orbit nest",true,12,"ported unknown-wireframe-lab procedural object"},
  {47,"Unknown superformula organism",true,12,"ported unknown-wireframe-lab procedural object"},{48,"Unknown knot lattice 13",true,12,"ported unknown-wireframe-lab procedural object"},
- {49,"Unknown golden spiral skeleton",true,12,"ported unknown-wireframe-lab procedural object"},{50,"Unknown twisted ruled shell",true,12,"ported unknown-wireframe-lab procedural object"}
+ {49,"Unknown golden spiral skeleton",true,12,"ported unknown-wireframe-lab procedural object"},{50,"Unknown twisted ruled shell",true,12,"ported unknown-wireframe-lab procedural object"},
+ {51,"Geodesic dome",true,20,"icosphere subdivision with breathing bump"},{52,"Tube trefoil",false,1,"trefoil knot swept as a wire tube"},
+ {53,"DNA helix",true,30,"double helix with base-pair rungs"},{54,"Atom orbits",true,30,"nucleus, tilted electron rings and electrons"},
+ {55,"Wave terrain",true,30,"rippling wire ocean grid"},{56,"Platonic compound",true,30,"icosahedron + dual dodecahedron + stella octangula"}
 }};
 }
 SceneSystem::SceneSystem():c600_(geo::cell600()),c120_(geo::cell120Vertices()){}
@@ -40,6 +44,7 @@ const Mesh3& SceneSystem::mesh(int id,double seconds,uint64_t seed){
   case 9:m=geo::project4D(c120_,t*.09f,t*.13f,8.5f,t*.07f,t*.11f);break;case 10:m=geo::cliffordTorus(56,30,2.2f);break;case 11:m=geo::hyperbolicBall(7,20,.9f);break;
   case 12:m=geo::quaternionJulia(24,8,.055f,{-.2f,.7f,.05f*std::sin(t*.1f),0});break;case 13:m=geo::lissajousKnot(1800,3,4,7,.4f+t*.03f);break;case 14:m=geo::strangeAttractor(14000,.004f);break;case 15:m=geo::discoveredObject(seed+tick,88,44);break;
   case 16:m=geo::mobiusStrip();break;case 17:m=geo::kleinBottle();break;case 18:m=geo::enneperSurface();break;case 19:m=geo::helicoidSurface();break;case 20:m=geo::catenoidSurface();break;case 21:m=geo::diniSurface();break;case 22:m=geo::pseudosphere();break;case 23:m=geo::romanSurface();break;case 24:m=geo::crossCap();break;case 25:m=geo::torusKnot(1800,3,7,.72f,.28f);break;case 26:m=geo::vivianiCurve();break;case 27:m=geo::sphericalSpiral();break;case 28:m=geo::hypotrochoidKnot(1800,5,3,5+.3f*std::sin(t*.2f));break;case 29:m=geo::duffingAttractor();break;case 30:m=geo::rosslerAttractor();break;case 31:m=geo::thomasAttractor();break;case 32:m=geo::sierpinskiTetrahedron(5);break;case 33:m=geo::exoticImplicit(geo::ExoticImplicitKind::Heart,25,t*.1f);break;case 34:m=geo::exoticImplicit(geo::ExoticImplicitKind::BarthSexticLike,25);break;case 35:m=geo::exoticImplicit(geo::ExoticImplicitKind::TangleCube,25,t*.1f);break;case 36:m=geo::exoticImplicit(geo::ExoticImplicitKind::ChmutovLike,25);break;case 37:m=geo::exoticImplicit(geo::ExoticImplicitKind::CayleyCubic,25);break;case 38:m=geo::exoticImplicit(geo::ExoticImplicitKind::KummerLike,25);break;case 39:m=geo::exoticImplicit(geo::ExoticImplicitKind::Goursat,25);break;case 40:m=geo::exoticImplicit(geo::ExoticImplicitKind::BlobLattice,25,t*.12f);break;
+  case 51:m=geo::geodesicDome(3,1.4f,.09f*std::sin(t*.8f));break;case 52:m=geo::tubeTrefoil();break;case 53:m=geo::dnaHelix(90,t*.8f);break;case 54:m=geo::atomOrbits(96,t);break;case 55:m=geo::waveTerrain(48,t);break;case 56:m=geo::platonicCompound(t);break;
   case 41:case 42:case 43:case 44:case 45:case 46:case 47:case 48:case 49:case 50:m=geo::unknownLabObject(unsigned(id-41),56,t);break;default:m=geo::discoveredObject(seed+tick,88,44);break;}
   auto& slot=cache_[id];slot.first=tick;slot.second=std::move(m);
   return slot.second;

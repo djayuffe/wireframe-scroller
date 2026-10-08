@@ -322,7 +322,7 @@ void main(){
                   .587-.587*ch+.33*sh,.587+.413*ch+.035*sh,.587-.588*ch-1.05*sh,
                   .114-.114*ch-.497*sh,.114-.114*ch+.292*sh,.114+.886*ch-.203*sh);
     hdr=mix(hdr,hue*hdr,k);
-    float sol=beat*(wid==3?0.:1.)*k*.35*(.4+mlev);
+    float sol=beat*(wid==3?0.:1.)*k*.18*(.4+mlev);
     hdr=mix(hdr,abs(hdr-.5)*2.,sol);
     float pst=smoothstep(.55,.95,sin(uTime*.31))*k*.5;
     hdr=mix(hdr,floor(hdr*5.+.5)/5.,pst); }

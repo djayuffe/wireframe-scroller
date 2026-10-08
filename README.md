@@ -7,7 +7,7 @@
 Copyright (c) 2026 Ulf Bertilsson. Code is MIT licensed. Tags: `wireframe` `demoscene` `opengl` `glfw` `cpp20` `4d-geometry` `procedural-geometry` `shaders` `libopenmpt` `tracker-music` `creative-coding` `macos`.
 
 ## Highlights
-- **51 scenes**: the 600-cell, its exact face-plane slice, the dual 120-cell, tesseract, Hopf fibres, Boy surface, Klein bottle, Dini surface, TPMS, Clifford torus, quaternion-Julia slice, Lissajous and chaotic attractors, and 10 procedural "unknown lab" objects.
+- **57 scenes**: the 600-cell, its exact face-plane slice, the dual 120-cell, tesseract, Hopf fibres, Boy surface, Klein bottle, Dini surface, TPMS, Clifford torus, quaternion-Julia slice, Lissajous and chaotic attractors, and 10 procedural "unknown lab" objects.
 - **Effect engine**: 64 CPU vertex-warper effects, 24 curated multi-stage recipes and a deterministic mutation generator. Every stage is fail-safe, so a bad combination restores the previous mesh instead of blanking the scene.
 - **Logo show**: 20 full-screen UBER cards fade in, hold for a few seconds, fade out, then give way to a long black break where the wireframe has the screen to itself.
 - **Arty black breaks**: when the logo is away, a procedural art layer fades in (domain-warped neon ink, beat-lit cracked-glass Voronoi, kaleidoscopic rose rings), slowly cross-fading between styles.
@@ -33,11 +33,15 @@ Captured with `--window 960x540 --screenshot PATH --frames N`.
 | Beat-synced scroller ticker at the bottom | Klein bottle immersion |
 | ![Dini surface](docs/screenshots/6-dini-surface.jpg) | ![3D organism](docs/screenshots/11-3d-organism.jpg) |
 | Dini surface | Breathing 3D metaball organism in the black break |
+| ![Wave terrain](docs/screenshots/14-wave-terrain.jpg) | ![Atom orbits](docs/screenshots/15-atom-orbits.jpg) |
+| New: wave terrain | New: atom orbits |
+| ![DNA helix](docs/screenshots/16-dna-helix.jpg) | |
+| New: DNA helix | |
 | ![Swirl and moire](docs/screenshots/12-wild-swirl-moire.jpg) | ![Mosaic crunch](docs/screenshots/13-wild-mosaic.jpg) |
 | Swirl warp over fractal and moire layers | Mosaic crunch event with hue drift |
 
 ## Implemented scenes
-The show contains 51 validated scenes. Exact or derived scenes include the 600-cell projection, the exact 600-cell face-plane slice and the dual-derived 120-cell projection. Parametric and numerical scenes include TPMS surfaces, Hopf fibres, Boy surface, superformula, Clifford torus, quaternion-Julia boundary slice, Lissajous and chaotic attractors, 25 v4 exotic geometry families and 10 ported unknown-lab procedural wire objects.
+The show contains 57 validated scenes. Exact or derived scenes include the 600-cell projection, the exact 600-cell face-plane slice and the dual-derived 120-cell projection. Parametric and numerical scenes include TPMS surfaces, Hopf fibres, Boy surface, superformula, Clifford torus, quaternion-Julia boundary slice, Lissajous and chaotic attractors, 25 v4 exotic geometry families and 10 ported unknown-lab procedural wire objects.
 
 `data/object_catalog.csv` records provenance. The hyperbolic and quaternion scenes are visualizations, not claimed canonical honeycomb or fractal meshes.
 
@@ -123,6 +127,7 @@ If OpenGL/GLFW are absent, CMake still builds `iw_geometry` and `geometry_tests`
 - Escape: quit
 - `--bpm N`: synchronization tempo (default 132) — also syncs the post-pass beat pulse
 - `--no-scroller`: start with the text marquee off (toggle back on with T)
+- `--scene N`: start on scene N (0-56) in manual mode; Space returns to auto
 - `--recipe N`: start in recipe mode with curated recipe N (0–23)
 - `--quality F`: render the HDR target (3D + post/FX) at F of screen resolution
   (0.25–1.0, default 1.0). Lower values are much faster on weak GPUs; the result
@@ -144,7 +149,7 @@ The renderer composites four layers, back to front:
    crossfades as the scene changes and has a subtle Ken Burns zoom +
    beat-reactive brightness. Cards are found automatically relative to the
    executable (or CWD), so the folder just needs to sit next to the binary.
-2. **Wireframe** — the 51 scenes with beat-reactive breathing scale, camera
+2. **Wireframe** — the 57 scenes with beat-reactive breathing scale, camera
    drift and morphing.
 3. **Traveling objects** — 12 small octahedra weaving back and forth through
    the wireframe (depth-sorted, so they pass in front of and behind the mesh).
@@ -223,6 +228,10 @@ See `docs/EFFECTS.md` for the implemented effect catalogue.
 - **Weak GPU**: use `--quality 0.5` or `--no-post`.
 
 ## Release notes
+### v4.34
+- Six new showpiece 3D objects (scenes 51-56): geodesic dome, tube trefoil knot, DNA double helix, atom with orbiting electrons, rippling wave terrain, Platonic compound (icosahedron + dodecahedron + stella octangula). They get a clean 'Pure form' window each ~12 s before the effect warp swells in.
+- New `--scene N` option to start on a given scene.
+
 ### v4.33
 - Wild shader events: every 6 s one warp takes over (swirl, radial ripples, kaleidoscope fold, mosaic crunch, datamosh block shift, liquid wobble, mirror horizon), plus hue drift, downbeat solarize and neon posterize bursts. Three new art styles: orbit-trap Julia fractal, op-art moire, Turing spots.
 
