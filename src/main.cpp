@@ -4,7 +4,7 @@
 #include <OpenGL/gl3.h>
 #include <mach-o/dyld.h>   // _NSGetExecutablePath
 #elif defined(_WIN32)
-#include <windows.h>        // GetModuleFileNameA
+#include "GLWin32.hpp"     // windows.h (GetModuleFileNameA) + GL 1.1 + the GL 4.1 function pointers
 #else
 #ifndef GL_GLEXT_PROTOTYPES
 #define GL_GLEXT_PROTOTYPES 1
@@ -132,7 +132,11 @@ int main(int argc,char**argv){
   GLFWwindow*w=glfwCreateWindow(cw,ch,"Impossible Wireframe v4.34",mon,nullptr);
   if(!w){std::fprintf(stderr,"OpenGL 4.1 context creation failed\n");glfwTerminate();return 2;}
   if(fullscreen)glfwSetWindowMonitor(w,mon,0,0,cw,ch,vm?vm->refreshRate:0);
-  glfwMakeContextCurrent(w);glfwSwapInterval(fullscreen?0:1);  // uncapped in fullscreen
+  glfwMakeContextCurrent(w);glfwSwapInterval(fullscreen?0:1);
+#ifdef _WIN32
+  { const char* missing=nullptr;
+    if(!de::loadGL(reinterpret_cast<void*(*)(const char*)>(glfwGetProcAddress),&missing)){std::fprintf(stderr,"OpenGL loader: missing %s (needs an OpenGL 4.1 driver)\n",missing?missing:"?");glfwDestroyWindow(w);glfwTerminate();return 2;} }
+#endif  // uncapped in fullscreen
  AudioPlayer audio;
 #if defined(IW_HAS_AUDIO)
  if(SDL_InitSubSystem(SDL_INIT_AUDIO)!=0) std::fprintf(stderr,"SDL audio init failed: %s\n",SDL_GetError());
