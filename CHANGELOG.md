@@ -2,6 +2,10 @@
 
 All notable changes, newest first. Each version is tagged and has a GitHub release.
 
+## v4.35
+- Windows support: an in-tree OpenGL 4.1 function loader (`GLWin32`), MSVC build definitions and warning policy, and a Windows CI job that builds and tests (it has not been run on a physical Windows machine yet).
+- CI fixes: GCC misleading-indentation, Apple clang `sprintf` deprecation in the vendored stb header, correct vcpkg port name.
+
 ## v4.34
 - Six new showpiece 3D objects (scenes 51-56): geodesic dome, tube trefoil knot, DNA double helix, atom with orbiting electrons, rippling wave terrain, Platonic compound (icosahedron + dodecahedron + stella octangula). They get a clean 'Pure form' window each ~12 s before the effect warp swells in.
 - New `--scene N` option to start on a given scene.
