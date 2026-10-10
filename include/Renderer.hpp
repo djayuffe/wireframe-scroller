@@ -46,6 +46,9 @@ public:
    // HDR frame is blitted straight to the screen. Faster, useful for debugging.
    void setPostEnabled(bool on) { postEnabled_ = on; }
    bool postEnabled() const { return postEnabled_; }
+   // Wire look: 0 = the default electric palette, 1 = golden glimmer (no depth test, so orbit clouds
+   // accumulate light additively; gold twinkle in wire.frag; gold cross glints in post.frag).
+   void setWireStyle(int s) { wireStyle_ = std::clamp(s, 0, 1); }
     const std::string& error() const { return error_; }
  private:
   bool createGl(const std::string& shaderDir);
@@ -60,7 +63,7 @@ public:
    unsigned scrollerFontTex_=0,scrollerCodesTex_=0; int scrollerCodesTexW_=0; int travelerEdgeCount_=0;
   int uBgMix_=-1,uBgZoom_=-1,uBgAspect_=-1,uBgTexAspect_=-1,uBgOp_=-1,uBgTime_=-1,uBgMusic_=-1,uBgTexA_=-1,uBgTexB_=-1;
    int uTrMVP_=-1,uTrTime_=-1,uTrColor_=-1,uTrSpeed_=-1;
-    bool hasLogos_=false; bool logoCapturePending_=false; float renderScale_=1.f; bool postEnabled_=true;
+    bool hasLogos_=false; bool logoCapturePending_=false; float renderScale_=1.f; bool postEnabled_=true; int wireStyle_=0; int uStyle_=-1,uPostGold_=-1;
     std::string error_;
   struct Logo { unsigned tex=0; int w=0,h=0; };
   std::vector<Logo> logos_;

@@ -72,12 +72,12 @@ int main(int argc,char**argv){
     else if(arg=="--fullscreen")fullscreen=true;
     else if(arg=="--scene"&&i+1<argc){sceneArg=std::atoi(argv[++i]);}
     else if(arg=="--recipe"&&i+1<argc){recipeArg=std::atoi(argv[++i]);haveRecipe=true;}
-    else if(arg=="--version"){std::fprintf(stdout,"Impossible Wireframe v4.36\n");return 0;}
+    else if(arg=="--version"){std::fprintf(stdout,"Impossible Wireframe v4.37\n");return 0;}
     else if(arg=="--screenshot"&&i+1<argc){screenshotPath=argv[++i];}
     else if(arg=="--frames"&&i+1<argc){maxFrames=std::max(0,std::atoi(argv[++i]));}
     else if(arg=="--help"||arg=="-h"){
       std::fprintf(stdout,
-        "Impossible Wireframe v4.36\n"
+        "Impossible Wireframe v4.37\n"
         "Usage: impossible_wireframe [options]\n"
         "  --bpm N         Tempo (default 132)\n"
         "  --music PATH    Audio module/wav to play (default: assets/music if present)\n"
@@ -86,7 +86,7 @@ int main(int argc,char**argv){
         "  --quality F     Render the HDR target at F of screen resolution (0.25-1.0,\n"
         "                  default 1.0; lower = faster on weak GPUs)\n"
         "  --logos DIR     Directory of UBER_*_1920x1080.jpg logo cards\n"
-        "  --scene N       Start on scene N in manual mode (0-56; Space returns to auto)\n"
+        "  --scene N       Start on scene N in manual mode (0-58; Space returns to auto)\n"
         "  --recipe N      Start in recipe mode with curated recipe N (0-29)\n"
         "  --window WxH    Initial window size, e.g. --window 1920x1080\n"
         "                  (default 1440x900; 320x200 .. 3840x2160)\n"
@@ -129,7 +129,7 @@ int main(int argc,char**argv){
   } else {
     cw=winW>0?winW:1440; ch=winH>0?winH:900;
   }
-  GLFWwindow*w=glfwCreateWindow(cw,ch,"Impossible Wireframe v4.36",mon,nullptr);
+  GLFWwindow*w=glfwCreateWindow(cw,ch,"Impossible Wireframe v4.37",mon,nullptr);
   if(!w){std::fprintf(stderr,"OpenGL 4.1 context creation failed\n");glfwTerminate();return 2;}
   if(fullscreen)glfwSetWindowMonitor(w,mon,0,0,cw,ch,vm?vm->refreshRate:0);
   glfwMakeContextCurrent(w);glfwSwapInterval(fullscreen?0:1);
@@ -248,19 +248,22 @@ int main(int argc,char**argv){
       const Mesh3* secondary=nullptr;
       for(int k=0;k<rc.stageCount;k++)
         if(rc.stages[k].useSecondary){ secondary=m.v.empty()?nullptr:&scenes.mesh((scene+1)%scenes.count(),showSeconds,seed); break; }
-      if(cleanShowpiece&&!recipeMode&&!haveRecipe){ lastRecipeName="Pure form"; } else applyRecipe(m,rc,ec,secondary);
+      // The golden orbit clouds (57-58) are never warped in auto mode: their motion is the attractor's own morph.
+      if(scene>=57&&!recipeMode&&!haveRecipe){ lastRecipeName="Golden glimmer"; }
+      else if(cleanShowpiece&&!recipeMode&&!haveRecipe){ lastRecipeName="Pure form"; } else applyRecipe(m,rc,ec,secondary);
     }
     // geo::stats() scans every vertex + edge to compute the radius; on a dense
     // scene (the 600-cell projection is ~1200 edges, a subdivided recipe can be
     // 50k+) it was called TWICE per frame (once for the upload-signature, once
     // for rad). Compute it once and reuse .radius.
-    auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);if(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig){if(!r.upload(m)){std::fprintf(stderr,"Mesh rejected in scene %d: %s\n",scene,r.error().c_str());break;}lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;}int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=std::max(.1f,st.radius);float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;
+    auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);if(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig){if(!r.upload(m)){std::fprintf(stderr,"Mesh rejected in scene %d: %s\n",scene,r.error().c_str());break;}lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;}int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=std::max(.1f,st.radius);float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;if(scene>=57)sizeCycle*=.8f;   // the golden orbit clouds are dense right out to their rim
       // 1) Wireframe. draw() captures into the HDR FBO (logo backdrop first in
       //    logo mode, wireframe additive on top in both modes).
+      r.setWireStyle(scene>=57?1:0);
       if(!r.draw(float(showSeconds),W,H,float(W)/float(H),scene,std::min(1.48f,1.92f/rad)*sizeCycle,1.f+sync.pulse,music.level)){std::fprintf(stderr,"Renderer draw failed: %s\n",r.error().c_str());break;}
       // 2) Traveling objects weaving back and forth through the wireframe
       //    (captured into the same HDR FBO).
-      r.drawTravelers(float(showSeconds),W,H,float(W)/float(H),std::min(1.48f,1.92f/rad)*sizeCycle,music.level);
+      if(scene<57)r.drawTravelers(float(showSeconds),W,H,float(W)/float(H),std::min(1.48f,1.92f/rad)*sizeCycle,music.level);
        // 3) Run the screen-space FX post pass over the captured frame
        //    (logo+wire+travelers in logo mode, wire+travelers otherwise).
        //    Pass bpm so the post shader's synthetic beat pulse is tempo-synced.

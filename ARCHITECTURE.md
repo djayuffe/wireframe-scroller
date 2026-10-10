@@ -11,7 +11,7 @@ Impossible Wireframe is a single-threaded render loop plus one audio callback th
                       v                        | atomic bands/level
   +-------------+   +-------------------------v--------------------------+
   | SceneSystem |-->|                      main loop                      |
-  | 57 meshes,  |   |  pick scene -> EffectRecipe -> applyRecipe(mesh)    |
+  | 59 meshes,  |   |  pick scene -> EffectRecipe -> applyRecipe(mesh)    |
   | cached      |   |  upload if changed -> draw passes -> screenshot     |
   +-------------+   +-------------------------+--------------------------+
         ^                                      |
@@ -38,8 +38,8 @@ Impossible Wireframe is a single-threaded render loop plus one audio callback th
 |---|---|
 | `Geometry` | `V3`/`V4`, `Mesh3` (vertices + edge list), `Polytope4`; canonical polychora (tesseract, 16-, 24-, 600-cell), 4D rotation and projection, hyperplane slicing, `validate`/`stats` |
 | `AdvancedGeometry` | Triply periodic implicit surfaces, 120-cell dual, quaternion-Julia slice, hyperbolic ball, Clifford torus, knots, attractors, v4 exotic families (parametric surfaces, algebraic isosurfaces, Sierpinski tetrahedron), 10 "unknown lab" objects, deterministic discovered objects |
-| `ShowpieceGeometry` | Scenes 51-56: geodesic dome, tube trefoil, DNA helix, atom orbits, wave terrain, Platonic compound; a `Builder` that de-duplicates edges |
-| `Scene` | The 57-entry catalogue (`SceneInfo`: id, name, dynamic flag, update Hz, provenance) and a per-scene cache keyed by the quantised time tick |
+| `ShowpieceGeometry` | Scenes 51-58: geodesic dome, tube trefoil, DNA helix, atom orbits, wave terrain, Platonic compound, and the golden de Jong / Clifford orbit clouds; a `Builder` that de-duplicates edges |
+| `Scene` | The 59-entry catalogue (`SceneInfo`: id, name, dynamic flag, update Hz, provenance) and a per-scene cache keyed by the quantised time tick |
 | `Effects` | 80 vertex warpers, 30 recipes, procedural mutation, `sanitize()` (drops self, duplicate and out-of-range edges), `applyRecipe` with restore-on-failure |
 | `Timeline` | Pure function from seconds and BPM to beat, bar, phase and pulse |
 | `Audio` | libopenmpt module rendering through SDL2; one-pole IIR band split into bass, mid, treble; publishes atomics read by the render thread (compiled out without `IW_HAS_AUDIO`) |
