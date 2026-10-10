@@ -2,6 +2,10 @@
 
 All notable changes, newest first. Each version is tagged and has a GitHub release.
 
+## Unreleased
+- WAV playback: `--music file.wav` now works (SDL decodes and loops it; band analysis and the music clock work as for modules). The bundled `wireframe_pulse.wav` and `make run-pulse` were silently falling back to the BPM clock because libopenmpt only reads tracker modules.
+- Golden scenes: light rays tinted gold.
+
 ## v4.37
 - New scenes 57-58, ported from uber256-lab: **Golden Galaxy** (de Jong attractor, GALAXY.COM) and **Golden Cliff** (Clifford attractor, CLIFF.COM) as glowing 3D orbit clouds with the original constants, start points and parameter morph.
 - New golden glimmer wire style: twinkling gold dashes, a sweeping shimmer band, four-point glints and gold cross streaks in the post pass; warps and colour grading stay off so the shape and colour survive.
