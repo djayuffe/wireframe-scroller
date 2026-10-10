@@ -250,7 +250,7 @@ void main(){
     }
   }
   streak*=mix(vec3(.55,.8,1.35),vec3(1.45,1.0,.42)*1.6,uGold)*.11;   // cool blue anamorphic tint, or gold glints
-  rays*=pal(uTime*.05)*.05*(.5+mlev+beat);
+  rays*=mix(pal(uTime*.05),vec3(1.3,.9,.4),uGold)*.05*(.5+mlev+beat);   // rainbow rays, or gold in the golden scenes
   float n=fbm(p*1.7+uTime*.035);
   float n2=fbm(p*3.1+vec2(uTime*.05,-uTime*.025));
   float star=step(.996,hash(floor((p+2.)*vec2(120.,70.)+floor(uTime*.25))));
