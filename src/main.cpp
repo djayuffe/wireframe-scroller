@@ -72,12 +72,12 @@ int main(int argc,char**argv){
     else if(arg=="--fullscreen")fullscreen=true;
     else if(arg=="--scene"&&i+1<argc){sceneArg=std::atoi(argv[++i]);}
     else if(arg=="--recipe"&&i+1<argc){recipeArg=std::atoi(argv[++i]);haveRecipe=true;}
-    else if(arg=="--version"){std::fprintf(stdout,"Impossible Wireframe v4.35\n");return 0;}
+    else if(arg=="--version"){std::fprintf(stdout,"Impossible Wireframe v4.36\n");return 0;}
     else if(arg=="--screenshot"&&i+1<argc){screenshotPath=argv[++i];}
     else if(arg=="--frames"&&i+1<argc){maxFrames=std::max(0,std::atoi(argv[++i]));}
     else if(arg=="--help"||arg=="-h"){
       std::fprintf(stdout,
-        "Impossible Wireframe v4.35\n"
+        "Impossible Wireframe v4.36\n"
         "Usage: impossible_wireframe [options]\n"
         "  --bpm N         Tempo (default 132)\n"
         "  --music PATH    Audio module/wav to play (default: assets/music if present)\n"
@@ -87,7 +87,7 @@ int main(int argc,char**argv){
         "                  default 1.0; lower = faster on weak GPUs)\n"
         "  --logos DIR     Directory of UBER_*_1920x1080.jpg logo cards\n"
         "  --scene N       Start on scene N in manual mode (0-56; Space returns to auto)\n"
-        "  --recipe N      Start in recipe mode with curated recipe N (0-23)\n"
+        "  --recipe N      Start in recipe mode with curated recipe N (0-29)\n"
         "  --window WxH    Initial window size, e.g. --window 1920x1080\n"
         "                  (default 1440x900; 320x200 .. 3840x2160)\n"
         "  --fullscreen    Start full-screen on the primary monitor (uncapped\n"
@@ -129,7 +129,7 @@ int main(int argc,char**argv){
   } else {
     cw=winW>0?winW:1440; ch=winH>0?winH:900;
   }
-  GLFWwindow*w=glfwCreateWindow(cw,ch,"Impossible Wireframe v4.35",mon,nullptr);
+  GLFWwindow*w=glfwCreateWindow(cw,ch,"Impossible Wireframe v4.36",mon,nullptr);
   if(!w){std::fprintf(stderr,"OpenGL 4.1 context creation failed\n");glfwTerminate();return 2;}
   if(fullscreen)glfwSetWindowMonitor(w,mon,0,0,cw,ch,vm?vm->refreshRate:0);
   glfwMakeContextCurrent(w);glfwSwapInterval(fullscreen?0:1);
@@ -174,7 +174,7 @@ int main(int argc,char**argv){
      }
  Timeline timeline(bpm);SceneSystem scenes;uint64_t seed=0x49574f424a454354ull;int manual=sceneArg,lastScene=-1,lastUploadScene=-1;bool prevL=false,prevR=false;const Mesh3* lastMesh=nullptr;std::tuple<size_t,size_t,float> lastMeshSig{0,0,-1.f};
     bool scrollerOn=!noScroller;
-    // Per-scene effect recipe (the lab's 24 curated recipes) with an optional
+    // Per-scene effect recipe (the lab's 30 curated recipes) with an optional
     // procedural "mutation" rotation. R toggles recipe mode, +/- cycle it.
     bool recipeMode=haveRecipe, prevF=false, prevP=false; int recipeChoice=haveRecipe?recipeArg:0; uint32_t baseSeed=0x50454646ull;
     std::string lastRecipeName;  // recipe/effect name shown in the scroller

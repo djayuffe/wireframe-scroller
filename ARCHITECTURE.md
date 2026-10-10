@@ -40,7 +40,7 @@ Impossible Wireframe is a single-threaded render loop plus one audio callback th
 | `AdvancedGeometry` | Triply periodic implicit surfaces, 120-cell dual, quaternion-Julia slice, hyperbolic ball, Clifford torus, knots, attractors, v4 exotic families (parametric surfaces, algebraic isosurfaces, Sierpinski tetrahedron), 10 "unknown lab" objects, deterministic discovered objects |
 | `ShowpieceGeometry` | Scenes 51-56: geodesic dome, tube trefoil, DNA helix, atom orbits, wave terrain, Platonic compound; a `Builder` that de-duplicates edges |
 | `Scene` | The 57-entry catalogue (`SceneInfo`: id, name, dynamic flag, update Hz, provenance) and a per-scene cache keyed by the quantised time tick |
-| `Effects` | 64 vertex warpers, 24 recipes, procedural mutation, `sanitize()` (drops self, duplicate and out-of-range edges), `applyRecipe` with restore-on-failure |
+| `Effects` | 80 vertex warpers, 30 recipes, procedural mutation, `sanitize()` (drops self, duplicate and out-of-range edges), `applyRecipe` with restore-on-failure |
 | `Timeline` | Pure function from seconds and BPM to beat, bar, phase and pulse |
 | `Audio` | libopenmpt module rendering through SDL2; one-pole IIR band split into bass, mid, treble; publishes atomics read by the render thread (compiled out without `IW_HAS_AUDIO`) |
 | `Renderer` | All GL state: programs, VAOs, the dynamic line buffers, RGBA16F HDR FBO, logo textures and the logo-show state machine, traveller mesh, scroller font and code-strip textures, screenshot |

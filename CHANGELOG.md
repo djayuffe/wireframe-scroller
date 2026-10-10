@@ -2,6 +2,10 @@
 
 All notable changes, newest first. Each version is tagged and has a GitHub release.
 
+## v4.36
+- 16 new "unknown" 3D wireframe effects (64-79): Hopf rotation, Klein fold, hyperbolic drift, Thomas flow, galactic disk, harmonic bloom, FCC crystal snap, tendril growth, shell cage, barbed wire, torus attractor, Moebius map, soliton wave, quaternion square, Lissajous satellites, spectral harmonics.
+- 6 new recipes: Hopf Fibration Storm, Hyperbolic Drift, Keplerian Galaxy, Barbed Crystal, Soliton Garden, Quaternion Bloom (80 effects and 30 recipes in total).
+
 ## v4.35
 - Windows support: an in-tree OpenGL 4.1 function loader (`GLWin32`), MSVC build definitions and warning policy, and a Windows CI job that builds and tests (it has not been run on a physical Windows machine yet).
 - CI fixes: GCC misleading-indentation, Apple clang `sprintf` deprecation in the vendored stb header, correct vcpkg port name.
