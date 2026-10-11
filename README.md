@@ -7,7 +7,7 @@
 Copyright (c) 2026 Ulf Bertilsson. MIT licensed. Current version: **v4.38**.
 Topics: `wireframe` `demoscene` `opengl` `glfw` `cpp20` `4d-geometry` `procedural-geometry` `shaders` `libopenmpt` `tracker-music` `creative-coding` `macos`
 
-**Contents:** [Quick start](#quick-start) | [Feature guide](#feature-guide) | [Screenshots](#screenshots) | [Controls and options](#controls-and-options) | [Build](#build) | [Tests and CI](#tests-and-ci) | [Repository layout](#repository-layout) | [Troubleshooting](#troubleshooting) | [Changelog](#changelog)
+**Contents:** [Quick start](#quick-start) | [Feature guide](#feature-guide) | [Screenshots](#screenshots) | [Controls and options](#controls-and-options) | [Build](#build) | [Tests and CI](#tests-and-ci) | [Repository layout](#repository-layout) | [Performance](#performance) | [Troubleshooting](#troubleshooting) | [Changelog](#changelog)
 
 See also: [ARCHITECTURE.md](ARCHITECTURE.md) (how it works), [docs/EFFECTS.md](docs/EFFECTS.md) (scene and effect catalogue), [design.md](design.md) (mathematical provenance), [CHANGELOG.md](CHANGELOG.md).
 
@@ -46,7 +46,7 @@ A CPU vertex-warper system reshapes the active mesh every frame.
 - **30 curated recipes** chain up to six effects, for example *Singularity Bloom*, *Impossible Cathedral*, *Quantum Shatter*, *Wormhole Lattice*, *Black Star*, *Wireframe Supernova*.
 - **Mutation**: in auto mode each scene gets a recipe (rotated by scene index) plus two deterministic procedural stages for per-scene variety. `P` re-rolls the seed.
 - **Audio driven**: bass, mid and treble bands from the music (or synthetic sines without audio) modulate the amounts, and `--bpm` syncs the beat pulse.
-- **Fail-safe**: any stage that leaves the mesh empty or invalid restores the previous frame; duplicate, self and out-of-range edges are sanitised away. Edge growth is capped at 50 000.
+- **Fail-safe and bounded**: a stage that empties the mesh is skipped, and one that produces non-finite vertices is undone and ends the chain, so the frame always has a valid mesh. Every stage stays within a 60,000-edge budget: copy and echo effects size themselves to fit, and anything still above is thinned evenly.
 - **Pure form**: showpiece scenes (51-56) skip mutation and show with no warp for part of each cycle so the object itself can be read.
 
 ### 3. Logo show
@@ -97,7 +97,7 @@ A beat-synced 5x7 pixel-font ticker along the bottom shows the scene index, name
 SDL2 and libopenmpt play the default soundtrack, *Stars* by cs127 (CC BY 4.0, see [Music](#music)), and split it into bass (<350 Hz), mid and treble (>3 kHz) bands in the audio callback. The bands drive glow, bloom, effect amounts and the background. Without audio the demo runs on a deterministic BPM clock (`Timeline`). Use `--music PATH` for your own module or WAV; the tempo is read from the module unless you pass `--bpm`. The ticker ends with the music credit.
 
 ### 10. Tooling
-`--screenshot PATH --frames N` captures frame N headlessly (used for every image in this README), `--scene N` jumps to a scene, `--quality F` renders the HDR target at a fraction of the resolution, `--no-post` bypasses the FX chain. Clean shutdown on Ctrl-C.
+`--screenshot PATH --frames N` captures frame N headlessly (used for every image in this README), `--scene N` jumps to a scene, `--quality F` renders the HDR target and the art pass at a fraction of the resolution, `--no-post` bypasses the FX chain, `--stats` prints fps and CPU time per frame every 5 seconds, `--no-vsync` uncaps the frame rate for benchmarking. Clean shutdown on Ctrl-C.
 
 ## Screenshots
 | | |
@@ -144,8 +144,10 @@ SDL2 and libopenmpt play the default soundtrack, *Stars* by cs127 (CC BY 4.0, se
 | `--music PATH` | Play a tracker module or wav |
 | `--logos DIR` | Directory of `UBER_*_1920x1080.jpg` cards |
 | `--window WxH` | Initial window size (320x200 to 3840x2160, default 1440x900) |
-| `--fullscreen` | Full-screen on the primary monitor (overrides `--window`) |
-| `--quality F` | Render the HDR target at F of the screen resolution (0.25-1.0) |
+| `--fullscreen` | Full-screen on the primary monitor (overrides `--window`), vsynced |
+| `--stats` | Print fps and CPU time per frame (scene, effects, upload) every 5 seconds |
+| `--no-vsync` | Do not wait for the display refresh (benchmarking) |
+| `--quality F` | Render the HDR target and the art pass at F of the screen resolution (0.25-1.0); 0.5 gives about +35% fps |
 | `--no-post` | Skip the screen-space FX (tone-map only); fastest |
 | `--no-scroller` | Start with the ticker off |
 | `--screenshot PATH` | Save a PNG |
@@ -236,6 +238,27 @@ GitHub Actions (`.github/workflows/ci.yml`) builds and tests on macOS 15, Ubuntu
 | `tools/` | `make_manifest.py` (SHA-256 manifest) |
 | `thirdparty/` | `stb_image`, `stb_image_write` |
 
+## Performance
+Measured on an Apple M1 Pro at Retina resolution (1728x1080 window, 3456x2160 pixels), v4.38 against the current code:
+
+| | Before | After |
+|---|---|---|
+| Scenes whose CPU work (scene + effects + upload) averaged over 16.7 ms | 25 of 59 | 0 |
+| Worst scene, CPU per frame (Tanglecube) | 256 ms avg, 2.9 s peak | 3.2 ms avg |
+| Edges after the effect chain | up to 404,000 | at most 60,000 |
+| Simplest scene, GPU-bound frame rate (uncapped) | 34 fps | 167 fps |
+| Schwarz D / Tanglecube frame rate | 3.8 / 2.9 fps | 109 / 106 fps |
+| `--quality 0.5` speed-up | none | about +35% |
+
+What changed:
+- **Effects**: duplicate-edge removal sorts packed 64-bit keys instead of filling a `std::set`, and only runs after the four effects that can create duplicates; multiplying effects respect a 60,000-edge budget.
+- **Scenes**: rebuilds (the implicit surfaces regenerate 4-6 times a second at 70-300 ms each) run on worker threads (`SceneSystem::meshAsync`); the render loop shows the previous tick until the new one is ready, and the next scene and both neighbours are built ahead of time.
+- **Upload**: an O(edges) renderability check instead of a full duplicate scan, edges uploaded directly as index pairs, and buffer orphaning so an update never waits for the GPU.
+- **GPU**: the procedural background and art layer moved to their own pass (`shaders/art.frag`) at half resolution, skipped entirely while a logo card covers the screen. It used to cost about 70% of every frame, visible or not.
+- **Vsync** is on in full-screen too; `--no-vsync` is for benchmarks.
+
+Guards: the tests run every scene through the auto recipe and fail if the result exceeds the edge budget or is not renderable, check every effect's output with the full validator, and check that the asynchronous fetch converges to the synchronous mesh.
+
 ## Music
 
 **Default soundtrack: "Stars (4ch. version)" by [cs127](https://modarchive.org/member.php?93224)**, a 4-channel ProTracker module (4:21, 125 BPM, genre "Demo Style"), from [The Mod Archive, module 201917](https://modarchive.org/index.php?request=view_by_moduleid&query=201917). Licensed under [Creative Commons Attribution 4.0 (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/) and bundled unmodified as `assets/music/cs127_-_stars_4ch.mod`. cs127 later finished the track as a longer IT version, [Stars (module 201894)](https://modarchive.org/index.php?request=view_by_moduleid&query=201894). Thank you, cs127.
@@ -256,7 +279,7 @@ The visuals lock to each module's own tempo (tempo x 6 / speed, folded into 70-1
 - **Shader edits have no effect**: shaders are copied to `build/shaders` at build time; run `make` after editing.
 - **Static GLFW link errors on macOS**: CMake searches `glfw` and `glfw3` and adds the Apple frameworks when linking statically.
 - **No audio**: install SDL2 and libopenmpt (`brew install sdl2 libopenmpt`); otherwise the BPM clock is used.
-- **Low frame rate**: try `--quality 0.5` or `--no-post`. The black-break art layer (raymarched organism) is the heaviest part.
+- **Low frame rate**: run with `--stats` to see whether the CPU or the GPU is the limit, then try `--quality 0.5` (GPU) or `--no-post` (skips all screen effects). See [Performance](#performance).
 - **Logo cards not found**: run from the repo root, or pass `--logos DIR`.
 
 ## Changelog

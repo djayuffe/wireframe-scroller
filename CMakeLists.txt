@@ -77,6 +77,9 @@ endfunction()
 # --- Core library (geometry / scenes / effects / font / image) -------------
 add_library(iw_geometry src/Geometry.cpp src/AdvancedGeometry.cpp src/Timeline.cpp src/Scene.cpp src/ShowpieceGeometry.cpp src/TextScroller.cpp src/Image.cpp src/Effects.cpp)
 target_include_directories(iw_geometry PUBLIC include thirdparty)
+# SceneSystem builds meshes on worker threads (std::async).
+find_package(Threads REQUIRED)
+target_link_libraries(iw_geometry PUBLIC Threads::Threads)
 iw_warnings(iw_geometry)
 
 # --- Dependency detection --------------------------------------------------

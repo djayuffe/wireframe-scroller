@@ -27,10 +27,10 @@ Impossible Wireframe is a single-threaded render loop plus one audio callback th
 ## Frame flow (`src/main.cpp`)
 1. Parse options, validate `--window`, `--recipe`, `--scene`; install SIGINT/SIGTERM flag; open the GLFW window (OpenGL 4.1 core), `Renderer::init`, `Renderer::loadLogos`, optional `AudioPlayer::open`.
 2. Each frame: sample `Timeline` at the show time for beat, bar and pulse; read `MusicState` if audio is active; handle keys (scene, recipe, scroller, seed).
-3. Choose the scene: automatic from the bar index, or `manual` (arrow keys, `--scene`). `SceneSystem::mesh()` returns the cached mesh for the current update tick.
+3. Choose the scene: automatic from the bar index, or `manual` (arrow keys, `--scene`). `SceneSystem::meshAsync()` returns the newest finished mesh without waiting: when the scene's update tick advances, the new mesh is built on a worker thread (`std::async`) and the previous one is shown meanwhile. The next scene in the sequence and both neighbours are prefetched, so only the very first scene ever builds on the render thread. `SceneSystem::mesh()` is the synchronous variant used by tests.
 4. Build an `EffectContext` (time, amount, bass/mid/treble/beat, seed) and an `EffectRecipe`: the curated recipe for the scene plus a two-stage mutation, a fixed recipe in recipe mode, or, for showpiece scenes 51-56, no mutation and a periodic "Pure form" window where no recipe is applied.
-5. `applyRecipe` chains the stages on a copy of the mesh and restores it if any stage yields an empty or invalid mesh. A secondary mesh (next scene) is computed only if a stage uses it.
-6. `Renderer::upload` only when the scene, mesh pointer or (vertex count, edge count, radius) signature changed; a rejected mesh ends the show with a message.
+5. `applyRecipe` chains the stages. A stage that empties the mesh is skipped; one that yields non-finite vertices is undone and ends the chain; every stage stays within the 60,000-edge budget. A secondary mesh (next scene) is computed only if a stage uses it.
+6. `Renderer::upload` only when the scene, mesh pointer or (vertex count, edge count, radius) signature changed. It checks `geo::renderable` (finite, in range, no self edges: O(edges)), uploads `Mesh3::e` directly as the index buffer and orphans the buffers first so it never waits for the GPU. A rejected mesh is logged once and the previous mesh stays on screen.
 7. Draw passes, scroller, then optional `screenshot` and the `--frames` exit check.
 
 ## Modules
@@ -60,6 +60,7 @@ An effect is `applyEffect(mesh, id, ctx, secondary)`. A recipe is up to six `Eff
 - **Logo show** (`Renderer::drawBackground`): a time-driven 14.5 s cycle (fade in 1 s, hold 3.5 s, fade out 1 s, black 9 s) sets `logoVis_`. `logoVis_` scales the card opacity, trims wire gain and is passed to the post shader as `uLogoVis`.
 - **`wire.frag`/`wire.vert`**: object-space colour cycling and music-reactive highlights; `uGain` is `clamp(0.80*sqrt(500/lines), 0.05, 1)` so dense meshes do not burn out.
 - **`traveler.*`**: one small octahedron mesh whose per-vertex lane index (`aPath`) lets the vertex shader ping-pong each traveller along its own Lissajous-style path.
+- **`art.frag`**: the procedural background and the art layer (ink, cracked glass, kaleidoscope, fractal, moire, Turing spots, raymarched organism), rendered into a half-resolution RGBA16F target before the post pass and upsampled there. Skipped entirely when its weight is zero (a logo card fully covering the screen, or `--no-post`).
 - **`post.frag`** (in order): UV warps (lensing, shockwave, barrel, wild event, chromatic aberration) gated by `1 - hasLogo`; bloom and streak taps; procedural background plus `artLayer` when the logo is away; additive compositing with logo-aware gain; SDF triangle, holographic stripes, glitch slices; scanlines, vignette, shadow, grain; hue drift, solarize, posterize; ACES tone map and gamma. `hasLogo = uHasLogo * uLogoVis`, so every logo-dependent term fades smoothly.
 - **`scroller.*`**: a full-screen triangle; the fragment shader finds the glyph cell for each pixel, reads the character code from the `uCodes` strip texture (fixed 512 texels), extracts the glyph bit with integer ops and writes premultiplied alpha.
 

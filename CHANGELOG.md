@@ -3,6 +3,19 @@
 All notable changes, newest first. Each version is tagged and has a GitHub release.
 
 ## Unreleased
+### Performance (see README, Performance)
+- Effects: sort-based duplicate removal only where duplicates can arise; a 60,000-edge budget every multiplying effect respects (chains reached 404,000 edges); stages that produce non-finite vertices are undone instead of poisoning the frame.
+- Scenes build on worker threads (`SceneSystem::meshAsync`, `prefetch`); the render loop never waits for the 70-300 ms implicit-surface rebuilds.
+- Upload: O(edges) `geo::renderable` check, direct index upload, buffer orphaning; `geo::validate` is sort-based.
+- GPU: the procedural background and art layer moved to a half-resolution pass (`shaders/art.frag`), skipped while a logo card covers the screen: the simplest scene went from 34 to 167 fps uncapped, the heaviest from 3 to over 100 fps.
+- `--quality` now also scales the art pass (it had no effect on the main GPU cost before).
+### Fixes
+- A rejected mesh no longer ends the show: it is logged once and the previous mesh stays.
+- Full-screen is vsynced (it ran uncapped, tearing and heating the GPU); `--no-vsync` for benchmarks.
+- The downbeat solarize flash no longer lifts the black background to grey.
+### New
+- `--stats`: fps and CPU time per frame every 5 seconds.
+- Tests: edge budget and renderability for every scene through the auto recipe, full validation of every effect, async scene fetch convergence, tempo continuity.
 - Soundtrack playlist: **"Digital Rendezvous" by Drozerix** (Public Domain, The Mod Archive 180821) now follows Stars, and the list loops. The credit in the ticker and the beat tempo switch with the track; the beat count carries on without a jump (`Timeline::retempo`). `--music` can be repeated for your own playlist.
 - Detected tempos are folded into 70-180 BPM (fast modules use 8 rows per beat; Digital Rendezvous reads as 276 and is 138).
 - The default music is found from the executable's directory and its ancestors too, so the demo is no longer silent when started from `build/`.

@@ -20,6 +20,7 @@
 #include "Effects.hpp"
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -73,7 +74,7 @@ int main(int argc,char**argv){
    int sceneArg=-1; bool haveRecipe=false; int recipeArg=0;  // haveRecipe=false -> auto mode
    double quality=1.0;  // render scale: the HDR target is W*quality x H*quality
    int winW=0,winH=0; bool fullscreen=false;  // --window WxH / --fullscreen
-   std::string screenshotPath; int maxFrames=0;  // --screenshot PATH / --frames N
+   std::string screenshotPath; int maxFrames=0; bool vsync=true, showStats=false;  // --screenshot PATH / --frames N
   for(int i=1;i<argc;i++){
     std::string arg(argv[i]);
     if(arg=="--bpm"&&i+1<argc){double v=std::atof(argv[++i]);if(!std::isfinite(v)){std::fprintf(stderr,"--bpm: not a finite number\n");return 2;}bpm=std::max(1.0,v);bpmGiven=true;}
@@ -88,6 +89,8 @@ int main(int argc,char**argv){
        winW=ww;winH=wh;
       }
     else if(arg=="--fullscreen")fullscreen=true;
+    else if(arg=="--no-vsync")vsync=false;
+    else if(arg=="--stats")showStats=true;
     else if(arg=="--scene"&&i+1<argc){sceneArg=std::atoi(argv[++i]);}
     else if(arg=="--recipe"&&i+1<argc){recipeArg=std::atoi(argv[++i]);haveRecipe=true;}
     else if(arg=="--version"){std::fprintf(stdout,"Impossible Wireframe v4.38\n");return 0;}
@@ -113,6 +116,8 @@ int main(int argc,char**argv){
         "  --screenshot P  Save one PNG frame to P (then continue running)\n"
         "  --frames N      Exit after N frames (0 = run forever; for automated\n"
         "                  verification, e.g. --frames 30 --screenshot out.png)\n"
+        "  --no-vsync      Do not wait for the display refresh (benchmarking)\n"
+        "  --stats         Print fps and CPU time per frame every 5 seconds\n"
         "  --version       Print version and exit\n"
         "  -h, --help      Show this help\n"
         "Keys: Left/Right cycle scenes, Space back to auto, R recipe mode,\n"
@@ -146,7 +151,7 @@ int main(int argc,char**argv){
   GLFWwindow*w=glfwCreateWindow(cw,ch,"Impossible Wireframe v4.38",mon,nullptr);
   if(!w){std::fprintf(stderr,"OpenGL 4.1 context creation failed\n");glfwTerminate();return 2;}
   if(fullscreen)glfwSetWindowMonitor(w,mon,0,0,cw,ch,vm?vm->refreshRate:0);
-  glfwMakeContextCurrent(w);glfwSwapInterval(fullscreen?0:1);
+  glfwMakeContextCurrent(w);glfwSwapInterval(vsync?1:0);   // vsync on in full-screen too: uncapped only burned the GPU and tore
 #ifdef _WIN32
   { const char* missing=nullptr;
     if(!de::loadGL(reinterpret_cast<void*(*)(const char*)>(glfwGetProcAddress),&missing)){std::fprintf(stderr,"OpenGL loader: missing %s (needs an OpenGL 4.1 driver)\n",missing?missing:"?");glfwDestroyWindow(w);glfwTerminate();return 2;} }
@@ -233,7 +238,13 @@ auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.leve
    if(R&&!prevR)manual=(curScene+1)%scenes.count();
    prevL=L;prevR=R;
    if(glfwGetKey(w,GLFW_KEY_SPACE)==GLFW_PRESS)manual=-1;
-  int scene=manual<0?autoScene:manual;Mesh3 m=scenes.mesh(scene,showSeconds,seed);if(scene!=lastScene){auto&si=scenes.info(scene);std::fprintf(stdout,"scene %02d: %.*s [%.*s]\n",scene,int(si.name.size()),si.name.data(),int(si.provenance.size()),si.provenance.data());lastScene=scene;}
+  const auto cpuStart=std::chrono::steady_clock::now();
+  int scene=manual<0?autoScene:manual;
+  // Never wait for a rebuild: the newest finished mesh is shown while the next tick builds off-thread,
+  // and the scenes that can come next start building before they are needed.
+  Mesh3 m=scenes.meshAsync(scene,showSeconds,seed);
+  { const int n=scenes.count();   // next in the auto sequence, and both neighbours for Left/Right
+    for(int nb:{(autoScene+1)%n,(scene+1)%n,(scene-1+n)%n})scenes.prefetch(nb,showSeconds,seed); }if(scene!=lastScene){auto&si=scenes.info(scene);std::fprintf(stdout,"scene %02d: %.*s [%.*s]\n",scene,int(si.name.size()),si.name.data(),int(si.provenance.size()),si.provenance.data());lastScene=scene;}
     // Toggle effect-recipe mode (R). Auto: per-scene curated recipe (rotated
     // by scene index) + a deterministic mutation overlay. Recipe: hold a fixed
     // curated recipe, Up/Down to cycle.
@@ -278,7 +289,7 @@ auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.leve
       // references it — otherwise a per-frame 600-cell projection is wasted.
       const Mesh3* secondary=nullptr;
       for(int k=0;k<rc.stageCount;k++)
-        if(rc.stages[k].useSecondary){ secondary=m.v.empty()?nullptr:&scenes.mesh((scene+1)%scenes.count(),showSeconds,seed); break; }
+        if(rc.stages[k].useSecondary){ secondary=m.v.empty()?nullptr:&scenes.meshAsync((scene+1)%scenes.count(),showSeconds,seed); break; }
       // The golden orbit clouds (57-58) are never warped in auto mode: their motion is the attractor's own morph.
       if(scene>=57&&!recipeMode&&!haveRecipe){ lastRecipeName="Golden glimmer"; }
       else if(cleanShowpiece&&!recipeMode&&!haveRecipe){ lastRecipeName="Pure form"; } else applyRecipe(m,rc,ec,secondary);
@@ -287,7 +298,15 @@ auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.leve
     // scene (the 600-cell projection is ~1200 edges, a subdivided recipe can be
     // 50k+) it was called TWICE per frame (once for the upload-signature, once
     // for rad). Compute it once and reuse .radius.
-    auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);if(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig){if(!r.upload(m)){std::fprintf(stderr,"Mesh rejected in scene %d: %s\n",scene,r.error().c_str());break;}lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;}int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=std::max(.1f,st.radius);float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;if(scene>=57)sizeCycle*=.8f;   // the golden orbit clouds are dense right out to their rim
+    auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);if(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig){if(r.upload(m)){lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;}
+      else{ static int rejected=-1; if(rejected!=scene){std::fprintf(stderr,"Mesh rejected in scene %d (%s): keeping the previous frame's mesh\n",scene,r.error().c_str());rejected=scene;} }}
+    { // --stats: CPU time of the scene + effects + upload work, and the frame rate
+      static double cpuSum=0,cpuMax=0,statT0=-1;static int statFrames=0;
+      const double cpuMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-cpuStart).count();
+      cpuSum+=cpuMs;cpuMax=std::max(cpuMax,cpuMs);++statFrames;
+      if(statT0<0)statT0=now;
+      if(showStats&&now-statT0>=5.0){std::fprintf(stdout,"stats: %.1f fps, CPU %.2f ms/frame avg, %.2f max, %zu edges, scene %d\n",statFrames/(now-statT0),cpuSum/statFrames,cpuMax,m.e.size(),scene);cpuSum=cpuMax=0;statFrames=0;statT0=now;}
+    }int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=std::max(.1f,st.radius);float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;if(scene>=57)sizeCycle*=.8f;   // the golden orbit clouds are dense right out to their rim
       // 1) Wireframe. draw() captures into the HDR FBO (logo backdrop first in
       //    logo mode, wireframe additive on top in both modes).
       r.setWireStyle(scene>=57?1:0);
