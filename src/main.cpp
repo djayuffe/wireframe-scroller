@@ -298,7 +298,8 @@ auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.leve
     // scene (the 600-cell projection is ~1200 edges, a subdivided recipe can be
     // 50k+) it was called TWICE per frame (once for the upload-signature, once
     // for rad). Compute it once and reuse .radius.
-    auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);if(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig){if(r.upload(m)){lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;}
+    auto st=geo::stats(m);auto sig=std::make_tuple(m.v.size(),m.e.size(),st.radius);static float shownRadius=1.f;   // radius of the mesh on screen (an empty m means the scene is still building)
+    if(!m.e.empty()&&(scene!=lastUploadScene||&m!=lastMesh||sig!=lastMeshSig)){if(r.upload(m)){lastUploadScene=scene;lastMesh=&m;lastMeshSig=sig;shownRadius=std::max(.1f,st.radius);}
       else{ static int rejected=-1; if(rejected!=scene){std::fprintf(stderr,"Mesh rejected in scene %d (%s): keeping the previous frame's mesh\n",scene,r.error().c_str());rejected=scene;} }}
     { // --stats: CPU time of the scene + effects + upload work, and the frame rate
       static double cpuSum=0,cpuMax=0,statT0=-1;static int statFrames=0;
@@ -306,7 +307,7 @@ auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.leve
       cpuSum+=cpuMs;cpuMax=std::max(cpuMax,cpuMs);++statFrames;
       if(statT0<0)statT0=now;
       if(showStats&&now-statT0>=5.0){std::fprintf(stdout,"stats: %.1f fps, CPU %.2f ms/frame avg, %.2f max, %zu edges, scene %d\n",statFrames/(now-statT0),cpuSum/statFrames,cpuMax,m.e.size(),scene);cpuSum=cpuMax=0;statFrames=0;statT0=now;}
-    }int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=std::max(.1f,st.radius);float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;if(scene>=57)sizeCycle*=.8f;   // the golden orbit clouds are dense right out to their rim
+    }int W,H;glfwGetFramebufferSize(w,&W,&H);if(W<=0||H<=0){glfwWaitEventsTimeout(.05);continue;}float rad=shownRadius;float sizeCycle=1.f+.11f*std::sin(float(showSeconds)*.41f+float(scene)*.37f)+.07f*sync.pulse;if(scene>=57)sizeCycle*=.8f;   // the golden orbit clouds are dense right out to their rim
       // 1) Wireframe. draw() captures into the HDR FBO (logo backdrop first in
       //    logo mode, wireframe additive on top in both modes).
       r.setWireStyle(scene>=57?1:0);

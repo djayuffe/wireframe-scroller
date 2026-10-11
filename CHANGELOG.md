@@ -5,7 +5,7 @@ All notable changes, newest first. Each version is tagged and has a GitHub relea
 ## Unreleased
 ### Performance (see README, Performance)
 - Effects: sort-based duplicate removal only where duplicates can arise; a 60,000-edge budget every multiplying effect respects (chains reached 404,000 edges); stages that produce non-finite vertices are undone instead of poisoning the frame.
-- Scenes build on worker threads (`SceneSystem::meshAsync`, `prefetch`); the render loop never waits for the 70-300 ms implicit-surface rebuilds.
+- Scenes build on worker threads (`SceneSystem::meshAsync`, `prefetch`); the render loop never waits for the 70-300 ms implicit-surface rebuilds, not even when a scene change outruns its prefetch (the previous mesh stays on screen until the new one is ready). Stress test at 600 BPM, 83 scene changes: worst frame 8.9 ms CPU (was 101 ms).
 - Upload: O(edges) `geo::renderable` check, direct index upload, buffer orphaning; `geo::validate` is sort-based.
 - GPU: the procedural background and art layer moved to a half-resolution pass (`shaders/art.frag`), skipped while a logo card covers the screen: the simplest scene went from 34 to 167 fps uncapped, the heaviest from 3 to over 100 fps.
 - `--quality` now also scales the art pass (it had no effect on the main GPU cost before).

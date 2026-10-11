@@ -252,7 +252,7 @@ Measured on an Apple M1 Pro at Retina resolution (1728x1080 window, 3456x2160 pi
 
 What changed:
 - **Effects**: duplicate-edge removal sorts packed 64-bit keys instead of filling a `std::set`, and only runs after the four effects that can create duplicates; multiplying effects respect a 60,000-edge budget.
-- **Scenes**: rebuilds (the implicit surfaces regenerate 4-6 times a second at 70-300 ms each) run on worker threads (`SceneSystem::meshAsync`); the render loop shows the previous tick until the new one is ready, and the next scene and both neighbours are built ahead of time.
+- **Scenes**: rebuilds (the implicit surfaces regenerate 4-6 times a second at 70-300 ms each) run on worker threads (`SceneSystem::meshAsync`); the render loop never waits: it shows the previous tick, or the previous scene, until the new mesh is ready, and the next scene and both neighbours are built ahead of time. A stress run at 600 BPM (83 scene changes in a minute) peaks at 8.9 ms CPU per frame.
 - **Upload**: an O(edges) renderability check instead of a full duplicate scan, edges uploaded directly as index pairs, and buffer orphaning so an update never waits for the GPU.
 - **GPU**: the procedural background and art layer moved to their own pass (`shaders/art.frag`) at half resolution, skipped entirely while a logo card covers the screen. It used to cost about 70% of every frame, visible or not.
 - **Vsync** is on in full-screen too; `--no-vsync` is for benchmarks.
