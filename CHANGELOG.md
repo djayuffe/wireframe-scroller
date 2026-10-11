@@ -2,7 +2,7 @@
 
 All notable changes, newest first. Each version is tagged and has a GitHub release.
 
-## Unreleased
+## v4.39
 ### Performance (see README, Performance)
 - Effects: sort-based duplicate removal only where duplicates can arise; a 60,000-edge budget every multiplying effect respects (chains reached 404,000 edges); stages that produce non-finite vertices are undone instead of poisoning the frame.
 - Scenes build on worker threads (`SceneSystem::meshAsync`, `prefetch`); the render loop never waits for the 70-300 ms implicit-surface rebuilds, not even when a scene change outruns its prefetch (the previous mesh stays on screen until the new one is ready). Stress test at 600 BPM, 83 scene changes: worst frame 8.9 ms CPU (was 101 ms).
