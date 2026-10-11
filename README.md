@@ -4,7 +4,7 @@
 
 **A real-time wireframe demoscene in C++20 and OpenGL 4.1 Core** for macOS, Linux and Windows. It renders 59 mathematically unusual objects, from exact 4D polychora to minimal surfaces, strange attractors and procedurally discovered shapes. A CPU effect engine warps them, an HDR post pass composites them over a timed logo show and a procedural art background, and a tracker module drives the motion.
 
-Copyright (c) 2026 Ulf Bertilsson. MIT licensed. Current version: **v4.37**.
+Copyright (c) 2026 Ulf Bertilsson. MIT licensed. Current version: **v4.38**.
 Topics: `wireframe` `demoscene` `opengl` `glfw` `cpp20` `4d-geometry` `procedural-geometry` `shaders` `libopenmpt` `tracker-music` `creative-coding` `macos`
 
 **Contents:** [Quick start](#quick-start) | [Feature guide](#feature-guide) | [Screenshots](#screenshots) | [Controls and options](#controls-and-options) | [Build](#build) | [Tests and CI](#tests-and-ci) | [Repository layout](#repository-layout) | [Troubleshooting](#troubleshooting) | [Changelog](#changelog)

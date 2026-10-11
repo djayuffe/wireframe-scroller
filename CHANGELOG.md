@@ -2,7 +2,7 @@
 
 All notable changes, newest first. Each version is tagged and has a GitHub release.
 
-## Unreleased
+## v4.38
 - New default soundtrack: **"Stars (4ch. version)" by cs127** (CC BY 4.0, The Mod Archive 201917), credited in the README, NOTICE, music README and in the ticker while it plays.
 - The visuals lock to the module's own tempo (tempo x 6 / speed) unless `--bpm` is given. Silicon Dancer turns out to be 125 BPM, not the 132 the docs assumed.
 - `make run-silicon` plays Silicon Dancer; the fetch script verifies both modules against The Mod Archive's MD5s.
