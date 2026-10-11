@@ -38,6 +38,13 @@ static void onSignal(int){g_shutdown.store(true);}
 // an explicit --logos override, the CWD, the executable's dir, then each
 // ancestor of the exe dir (covers build/ -> repo root). Used at startup and
 // again after a GL context loss (to re-load the logo textures).
+// Every place an asset at relative path `rel` could live: the CWD, the executable's directory, then
+// each ancestor of it (covers running from build/ or from an installed copy).
+static std::vector<std::filesystem::path> assetCandidates(const std::filesystem::path& rel,const std::filesystem::path& exeDir){
+  std::vector<std::filesystem::path> c{std::filesystem::current_path()/rel};
+  if(!exeDir.empty()){ c.push_back(exeDir/rel); auto p=exeDir; while(p.has_parent_path()&&p.parent_path()!=p){ p=p.parent_path(); c.push_back(p/rel); } }
+  return c;
+}
 static std::vector<std::filesystem::path> logoCandidates(const std::filesystem::path& overrideDir,const std::filesystem::path& exeDir){
   std::vector<std::filesystem::path> c;
   if(!overrideDir.empty()) c.push_back(overrideDir);
@@ -55,13 +62,14 @@ static std::vector<std::filesystem::path> logoCandidates(const std::filesystem::
 static std::string creditFor(const std::filesystem::path& p){
   const std::string f=p.filename().string();
   if(f=="cs127_-_stars_4ch.mod")return "Music: Stars by cs127 (CC BY 4.0)";
+  if(f=="drozerix_-_digital_rendezvous.xm")return "Music: Digital Rendezvous by Drozerix (Public Domain)";
   if(f=="drozerix_-_silicon_dancer.mod")return "Music: Silicon Dancer by Drozerix (Public Domain)";
   if(f=="wireframe_pulse.wav")return "Music: Wireframe Pulse (CC0)";
   return {};
 }
 
 int main(int argc,char**argv){
-   double bpm=132.0;bool bpmGiven=false;std::filesystem::path musicPath,logoOverride;bool noScroller=false,noPost=false;
+   double bpm=132.0;bool bpmGiven=false;std::vector<std::filesystem::path> musicPaths;std::filesystem::path logoOverride;bool noScroller=false,noPost=false;
    int sceneArg=-1; bool haveRecipe=false; int recipeArg=0;  // haveRecipe=false -> auto mode
    double quality=1.0;  // render scale: the HDR target is W*quality x H*quality
    int winW=0,winH=0; bool fullscreen=false;  // --window WxH / --fullscreen
@@ -69,7 +77,7 @@ int main(int argc,char**argv){
   for(int i=1;i<argc;i++){
     std::string arg(argv[i]);
     if(arg=="--bpm"&&i+1<argc){double v=std::atof(argv[++i]);if(!std::isfinite(v)){std::fprintf(stderr,"--bpm: not a finite number\n");return 2;}bpm=std::max(1.0,v);bpmGiven=true;}
-    else if(arg=="--music"&&i+1<argc)musicPath=argv[++i];
+    else if(arg=="--music"&&i+1<argc)musicPaths.push_back(argv[++i]);   // repeat for a playlist
     else if(arg=="--no-scroller")noScroller=true;
     else if(arg=="--no-post")noPost=true;
     else if(arg=="--quality"&&i+1<argc){double v=std::atof(argv[++i]);if(!std::isfinite(v)){std::fprintf(stderr,"--quality: not a finite number\n");return 2;}quality=std::clamp(v,0.25,1.0);}
@@ -90,7 +98,7 @@ int main(int argc,char**argv){
         "Impossible Wireframe v4.38\n"
         "Usage: impossible_wireframe [options]\n"
         "  --bpm N         Tempo (default: read from the module, else 132)\n"
-        "  --music PATH    Audio module/wav to play (default: assets/music if present)\n"
+        "  --music PATH    Module or WAV to play; repeat for a playlist (default: Stars,\n                  then Digital Rendezvous, looping)\n"
         "  --no-scroller   Start with the text marquee off (toggle with T)\n"
         "  --no-post       Skip the screen-space FX post pass (faster; debugging)\n"
         "  --quality F     Render the HDR target at F of screen resolution (0.25-1.0,\n"
@@ -118,11 +126,6 @@ int main(int argc,char**argv){
   // (async-signal-safe); the render loop checks it and tears down GL/SDL.
   std::signal(SIGINT,onSignal);
   std::signal(SIGTERM,onSignal);
-  if(musicPath.empty()){
-   // Default soundtrack: "Stars (4ch. version)" by cs127, CC BY 4.0 (see assets/music/README.md).
-   std::filesystem::path defaultMusic="assets/music/cs127_-_stars_4ch.mod";
-   if(std::filesystem::exists(defaultMusic)) musicPath=defaultMusic;
-  }
  if(!glfwInit()){std::fprintf(stderr,"GLFW initialization failed\n");return 1;}glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,4);glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,1);glfwWindowHint(GLFW_OPENGL_PROFILE,GLFW_OPENGL_CORE_PROFILE);
 #ifdef __APPLE__
  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT,GL_TRUE);
@@ -152,13 +155,6 @@ int main(int argc,char**argv){
 #if defined(IW_HAS_AUDIO)
  if(SDL_InitSubSystem(SDL_INIT_AUDIO)!=0) std::fprintf(stderr,"SDL audio init failed: %s\n",SDL_GetError());
 #endif
- if(!musicPath.empty()){
-  if(audio.open(musicPath)){
-   // Lock the visuals to the module's own tempo unless --bpm was given.
-   if(!bpmGiven&&audio.nativeBpm()>0)bpm=audio.nativeBpm();
-   std::fprintf(stdout,"music: %s (%.0f BPM)\n",musicPath.string().c_str(),bpm);
-  }
- }
    std::string shaderDir="shaders";
    std::filesystem::path exeDir;
    { // B3 fix: resolve shaders relative to the executable, not the CWD
@@ -178,6 +174,18 @@ int main(int argc,char**argv){
      if(std::filesystem::exists(cand/"wire.vert")) shaderDir=cand.string();
     }
    }
+  if(musicPaths.empty()){
+   // Default soundtrack playlist (see assets/music/README.md), found from the CWD, the executable's
+   // directory or any ancestor of it, so the demo also has music when started from build/:
+   // "Stars (4ch. version)" by cs127 (CC BY 4.0), then "Digital Rendezvous" by Drozerix (Public Domain).
+   for(const char* rel:{"assets/music/cs127_-_stars_4ch.mod","assets/music/drozerix_-_digital_rendezvous.xm"})
+    for(auto& c:assetCandidates(rel,exeDir)){ std::error_code ec; if(std::filesystem::exists(c,ec)){ musicPaths.push_back(c); break; } }
+  }
+  if(!musicPaths.empty()&&audio.open(musicPaths)){
+   // Lock the visuals to the module's own tempo unless --bpm was given.
+   if(!bpmGiven&&audio.nativeBpm(0)>0)bpm=audio.nativeBpm(0);
+   for(int i=0;i<audio.trackCount();++i)std::fprintf(stdout,"music %d/%d: %s (%.0f BPM)\n",i+1,audio.trackCount(),audio.trackPath(i).string().c_str(),audio.nativeBpm(i)>0?audio.nativeBpm(i):bpm);
+  }
       Renderer r;if(!r.init(w,shaderDir)){std::fprintf(stderr,"Renderer init failed: %s\n",r.error().c_str());audio.close();glfwDestroyWindow(w);glfwTerminate();return 3;}
       r.setRenderScale(float(quality));
       r.setPostEnabled(!noPost);
@@ -187,7 +195,7 @@ int main(int argc,char**argv){
        for(auto& c:candidates){ if(r.loadLogos(c.string())){ loaded=true; std::fprintf(stdout,"logos: %d cards from %s\n",r.logoCount(),c.string().c_str()); break; } }
        if(!loaded){ std::fprintf(stderr,"warning: no UBER_Fullscreen_Logo_Pack found; tried:\n"); for(auto& c:candidates)std::fprintf(stderr,"  %s\n",c.string().c_str()); std::fprintf(stderr,"  -> running without logo background\n"); }
      }
- const std::string musicCredit=audio.state().active?creditFor(musicPath):std::string();
+ std::string musicCredit=audio.state().active?creditFor(audio.trackPath(0)):std::string();int lastTrack=0;
  Timeline timeline(bpm);SceneSystem scenes;uint64_t seed=0x49574f424a454354ull;int manual=sceneArg,lastScene=-1,lastUploadScene=-1;bool prevL=false,prevR=false;const Mesh3* lastMesh=nullptr;std::tuple<size_t,size_t,float> lastMeshSig{0,0,-1.f};
     bool scrollerOn=!noScroller;
     // Per-scene effect recipe (the lab's 30 curated recipes) with an optional
@@ -207,7 +215,14 @@ int main(int argc,char**argv){
       glfwWaitEventsTimeout(.05);
       continue;
     }
-    double now=glfwGetTime();auto music=audio.state();double showSeconds=music.active?music.seconds:now;auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.level);int autoScene=int(sync.barIndex/2)%scenes.count();
+    double now=glfwGetTime();auto music=audio.state();double showSeconds=music.active?music.seconds:now;
+    // A new playlist track: switch the credit and lock to its tempo without a jump in the beat count.
+    if(music.active&&music.track!=lastTrack&&music.track>=0){
+      lastTrack=music.track;musicCredit=creditFor(audio.trackPath(lastTrack));
+      if(!bpmGiven&&audio.nativeBpm(lastTrack)>0){bpm=audio.nativeBpm(lastTrack);timeline.retempo(showSeconds,bpm);}
+      std::fprintf(stdout,"music: now playing %s (%.0f BPM)\n",audio.trackPath(lastTrack).filename().string().c_str(),bpm);
+    }
+auto sync=timeline.sample(showSeconds);sync.pulse=std::max(sync.pulse,music.level);int autoScene=int(sync.barIndex/2)%scenes.count();
    if(glfwGetKey(w,GLFW_KEY_T)==GLFW_PRESS){bool want=!scrollerOn;scrollerOn=want;}
    bool L=glfwGetKey(w,GLFW_KEY_LEFT)==GLFW_PRESS,R=glfwGetKey(w,GLFW_KEY_RIGHT)==GLFW_PRESS;
    // Normalize the current scene (auto -> autoScene) before applying the

@@ -2,6 +2,11 @@
 
 All notable changes, newest first. Each version is tagged and has a GitHub release.
 
+## Unreleased
+- Soundtrack playlist: **"Digital Rendezvous" by Drozerix** (Public Domain, The Mod Archive 180821) now follows Stars, and the list loops. The credit in the ticker and the beat tempo switch with the track; the beat count carries on without a jump (`Timeline::retempo`). `--music` can be repeated for your own playlist.
+- Detected tempos are folded into 70-180 BPM (fast modules use 8 rows per beat; Digital Rendezvous reads as 276 and is 138).
+- The default music is found from the executable's directory and its ancestors too, so the demo is no longer silent when started from `build/`.
+
 ## v4.38
 - New default soundtrack: **"Stars (4ch. version)" by cs127** (CC BY 4.0, The Mod Archive 201917), credited in the README, NOTICE, music README and in the ticker while it plays.
 - The visuals lock to the module's own tempo (tempo x 6 / speed) unless `--bpm` is given. Silicon Dancer turns out to be 125 BPM, not the 132 the docs assumed.
