@@ -50,15 +50,25 @@ static std::vector<std::filesystem::path> logoCandidates(const std::filesystem::
    return c;
  }
 
+// On-screen credit for the bundled tracks (shown in the ticker). Keyed by file name so a renamed or
+// user-supplied track simply gets no credit line.
+static std::string creditFor(const std::filesystem::path& p){
+  const std::string f=p.filename().string();
+  if(f=="cs127_-_stars_4ch.mod")return "Music: Stars by cs127 (CC BY 4.0)";
+  if(f=="drozerix_-_silicon_dancer.mod")return "Music: Silicon Dancer by Drozerix (Public Domain)";
+  if(f=="wireframe_pulse.wav")return "Music: Wireframe Pulse (CC0)";
+  return {};
+}
+
 int main(int argc,char**argv){
-   double bpm=132.0;std::filesystem::path musicPath,logoOverride;bool noScroller=false,noPost=false;
+   double bpm=132.0;bool bpmGiven=false;std::filesystem::path musicPath,logoOverride;bool noScroller=false,noPost=false;
    int sceneArg=-1; bool haveRecipe=false; int recipeArg=0;  // haveRecipe=false -> auto mode
    double quality=1.0;  // render scale: the HDR target is W*quality x H*quality
    int winW=0,winH=0; bool fullscreen=false;  // --window WxH / --fullscreen
    std::string screenshotPath; int maxFrames=0;  // --screenshot PATH / --frames N
   for(int i=1;i<argc;i++){
     std::string arg(argv[i]);
-    if(arg=="--bpm"&&i+1<argc){double v=std::atof(argv[++i]);if(!std::isfinite(v)){std::fprintf(stderr,"--bpm: not a finite number\n");return 2;}bpm=std::max(1.0,v);}
+    if(arg=="--bpm"&&i+1<argc){double v=std::atof(argv[++i]);if(!std::isfinite(v)){std::fprintf(stderr,"--bpm: not a finite number\n");return 2;}bpm=std::max(1.0,v);bpmGiven=true;}
     else if(arg=="--music"&&i+1<argc)musicPath=argv[++i];
     else if(arg=="--no-scroller")noScroller=true;
     else if(arg=="--no-post")noPost=true;
@@ -79,7 +89,7 @@ int main(int argc,char**argv){
       std::fprintf(stdout,
         "Impossible Wireframe v4.37\n"
         "Usage: impossible_wireframe [options]\n"
-        "  --bpm N         Tempo (default 132)\n"
+        "  --bpm N         Tempo (default: read from the module, else 132)\n"
         "  --music PATH    Audio module/wav to play (default: assets/music if present)\n"
         "  --no-scroller   Start with the text marquee off (toggle with T)\n"
         "  --no-post       Skip the screen-space FX post pass (faster; debugging)\n"
@@ -109,7 +119,8 @@ int main(int argc,char**argv){
   std::signal(SIGINT,onSignal);
   std::signal(SIGTERM,onSignal);
   if(musicPath.empty()){
-   std::filesystem::path defaultMusic="assets/music/drozerix_-_silicon_dancer.mod";
+   // Default soundtrack: "Stars (4ch. version)" by cs127, CC BY 4.0 (see assets/music/README.md).
+   std::filesystem::path defaultMusic="assets/music/cs127_-_stars_4ch.mod";
    if(std::filesystem::exists(defaultMusic)) musicPath=defaultMusic;
   }
  if(!glfwInit()){std::fprintf(stderr,"GLFW initialization failed\n");return 1;}glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,4);glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,1);glfwWindowHint(GLFW_OPENGL_PROFILE,GLFW_OPENGL_CORE_PROFILE);
@@ -142,7 +153,11 @@ int main(int argc,char**argv){
  if(SDL_InitSubSystem(SDL_INIT_AUDIO)!=0) std::fprintf(stderr,"SDL audio init failed: %s\n",SDL_GetError());
 #endif
  if(!musicPath.empty()){
-  if(audio.open(musicPath)) std::fprintf(stdout,"music: %s\n",musicPath.string().c_str());
+  if(audio.open(musicPath)){
+   // Lock the visuals to the module's own tempo unless --bpm was given.
+   if(!bpmGiven&&audio.nativeBpm()>0)bpm=audio.nativeBpm();
+   std::fprintf(stdout,"music: %s (%.0f BPM)\n",musicPath.string().c_str(),bpm);
+  }
  }
    std::string shaderDir="shaders";
    std::filesystem::path exeDir;
@@ -172,6 +187,7 @@ int main(int argc,char**argv){
        for(auto& c:candidates){ if(r.loadLogos(c.string())){ loaded=true; std::fprintf(stdout,"logos: %d cards from %s\n",r.logoCount(),c.string().c_str()); break; } }
        if(!loaded){ std::fprintf(stderr,"warning: no UBER_Fullscreen_Logo_Pack found; tried:\n"); for(auto& c:candidates)std::fprintf(stderr,"  %s\n",c.string().c_str()); std::fprintf(stderr,"  -> running without logo background\n"); }
      }
+ const std::string musicCredit=audio.state().active?creditFor(musicPath):std::string();
  Timeline timeline(bpm);SceneSystem scenes;uint64_t seed=0x49574f424a454354ull;int manual=sceneArg,lastScene=-1,lastUploadScene=-1;bool prevL=false,prevR=false;const Mesh3* lastMesh=nullptr;std::tuple<size_t,size_t,float> lastMeshSig{0,0,-1.f};
     bool scrollerOn=!noScroller;
     // Per-scene effect recipe (the lab's 30 curated recipes) with an optional
@@ -283,6 +299,7 @@ int main(int argc,char**argv){
      label+="  -  ";label+=si.provenance;
      if(!lastRecipeName.empty()){label+="  *  ";label+=lastRecipeName;}
      label+=bpmStr;
+     if(!musicCredit.empty()){label+="  *  ";label+=musicCredit;}
       r.drawScroller(float(showSeconds),sync.beatPhase,W,H,label.c_str(),music.level);
      }
     // --screenshot: capture the finished frame (post pass + scroller already in

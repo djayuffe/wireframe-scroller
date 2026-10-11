@@ -14,7 +14,7 @@ See also: [ARCHITECTURE.md](ARCHITECTURE.md) (how it works), [docs/EFFECTS.md](d
 ## Quick start
 ```sh
 brew install cmake glfw sdl2 libopenmpt   # macOS; SDL2 + libopenmpt are optional (music)
-make run                                  # build and launch, 132 BPM
+make run                                  # build and launch with Stars by cs127 (125 BPM)
 ./build/impossible_wireframe --scene 54   # jump straight to a scene
 ```
 The window opens on the logo show; press Right to step through scenes, T to toggle the scroller, Esc to quit.
@@ -94,7 +94,7 @@ Small octahedra (one per lane) weave back and forth through the wireframe, depth
 A beat-synced 5x7 pixel-font ticker along the bottom shows the scene index, name, provenance, the active recipe and the BPM, for example `[14] LORENZ ATTRACTOR - numerical trajectory * Black Star 132BPM`. It flashes on each downbeat and scrolls at a constant 90 px/s. Toggle with T or start without it using `--no-scroller`.
 
 ### 9. Music and sync
-SDL2 and libopenmpt play a bundled public-domain MOD (Drozerix, *Silicon Dancer*) and split it into bass (<350 Hz), mid and treble (>3 kHz) bands in the audio callback. The bands drive glow, bloom, effect amounts and the background. Without audio the demo runs on a deterministic BPM clock (`Timeline`). Use `--music PATH` for your own module.
+SDL2 and libopenmpt play the default soundtrack, *Stars* by cs127 (CC BY 4.0, see [Music](#music)), and split it into bass (<350 Hz), mid and treble (>3 kHz) bands in the audio callback. The bands drive glow, bloom, effect amounts and the background. Without audio the demo runs on a deterministic BPM clock (`Timeline`). Use `--music PATH` for your own module or WAV; the tempo is read from the module unless you pass `--bpm`. The ticker ends with the music credit.
 
 ### 10. Tooling
 `--screenshot PATH --frames N` captures frame N headlessly (used for every image in this README), `--scene N` jumps to a scene, `--quality F` renders the HDR target at a fraction of the resolution, `--no-post` bypasses the FX chain. Clean shutdown on Ctrl-C.
@@ -140,7 +140,7 @@ SDL2 and libopenmpt play a bundled public-domain MOD (Drozerix, *Silicon Dancer*
 |---|---|
 | `--scene N` | Start on scene N (0-58) in manual mode |
 | `--recipe N` | Start in recipe mode with curated recipe N (0-29) |
-| `--bpm N` | Tempo, default 132; also syncs the post-pass beat pulse |
+| `--bpm N` | Tempo; default is the module's own tempo (Stars: 125), else 132. Also syncs the post-pass beat pulse |
 | `--music PATH` | Play a tracker module or wav |
 | `--logos DIR` | Directory of `UBER_*_1920x1080.jpg` cards |
 | `--window WxH` | Initial window size (320x200 to 3840x2160, default 1440x900) |
@@ -159,7 +159,8 @@ simplest path is just:
 ```sh
 make            # configure (if needed) + build (Release, parallel)
 make test       # build + run the geometry/scroller tests
-make run        # build + launch (default music, 132 bpm)
+make run        # build + launch (Stars by cs127, tempo from the module)
+make run-silicon# Silicon Dancer by Drozerix
 make run-pulse  # launch with the CC0 Wireframe Pulse track
 make diag       # dump the resolved toolchain (SDK, GLFW, SDL2, openmpt)
 make clean      # remove the build/ directory
@@ -182,7 +183,7 @@ brew install cmake glfw
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ctest --test-dir build --output-on-failure
-./build/impossible_wireframe --bpm 132
+./build/impossible_wireframe
 ```
 
 Optional audio playback (libopenmpt + SDL2) is detected automatically; on
@@ -236,7 +237,16 @@ GitHub Actions (`.github/workflows/ci.yml`) builds and tests on macOS 15, Ubuntu
 | `thirdparty/` | `stb_image`, `stb_image_write` |
 
 ## Music
-The repository includes Drozerix - **Silicon Dancer** (MOD), listed by the Quinlight Audio project as Public Domain. `python3 assets/music/fetch_other_music.py` refreshes it.
+
+**Default soundtrack: "Stars (4ch. version)" by [cs127](https://modarchive.org/member.php?93224)**, a 4-channel ProTracker module (4:21, 125 BPM, genre "Demo Style"), from [The Mod Archive, module 201917](https://modarchive.org/index.php?request=view_by_moduleid&query=201917). Licensed under [Creative Commons Attribution 4.0 (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/) and bundled unmodified as `assets/music/cs127_-_stars_4ch.mod`. cs127 later finished the track as a longer IT version, [Stars (module 201894)](https://modarchive.org/index.php?request=view_by_moduleid&query=201894). Thank you, cs127.
+
+Why this track: it is a demo-style Amiga MOD, like the cracktros this project comes from; its steady 125 BPM groove suits the beat-synced scene changes; its title fits the golden galaxy scenes; and its licence allows bundling with credit.
+
+Also bundled:
+- **"Silicon Dancer" by Drozerix** (MOD, Public Domain, [Mod Archive 209692](https://modarchive.org/index.php?request=view_by_moduleid&query=209692)): `make run-silicon`.
+- **"Wireframe Pulse"** (WAV, CC0, made for this project): `make run-pulse`.
+
+The visuals lock to the module's own tempo (tempo x 6 / speed) unless you pass `--bpm`. The ticker shows the credit of the track that is playing.
 
 ## Troubleshooting
 - **Shader edits have no effect**: shaders are copied to `build/shaders` at build time; run `make` after editing.

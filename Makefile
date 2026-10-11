@@ -6,7 +6,8 @@
 # Usage:
 #   make            # configure + build (Release)
 #   make test       # build + run ctest
-#   make run        # build + launch (default music, 132 bpm)
+#   make run        # build + launch (default music: Stars by cs127, tempo read from the module)
+#   make run-silicon# build + launch with Silicon Dancer by Drozerix
 #   make run-pulse  # launch with the CC0 Wireframe Pulse track
 #   make clean      # remove the build/ directory
 #   make reconfigure# force a fresh CMake configure (new build dir)
@@ -40,7 +41,7 @@ CMAKE_FLAGS := -DCMAKE_BUILD_TYPE=$(TYPE) -DIW_BUILD_TESTS=ON $(CMAKE_EXTRA)
 # the build-type / generator case.)
 STAMP := $(BUILD_DIR)/.stamp
 
-.PHONY: all configure build test run run-pulse clean reconfigure diag help stamp
+.PHONY: all configure build test run run-silicon run-pulse clean reconfigure diag help stamp
 
 all: build
 
@@ -83,7 +84,10 @@ test: build
 	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure
 
 run: build
-	$(BIN) --bpm 132
+	$(BIN)
+
+run-silicon: build
+	$(BIN) --music assets/music/drozerix_-_silicon_dancer.mod
 
 run-pulse: build
 	$(BIN) --bpm 128 --music assets/music/wireframe_pulse.wav
@@ -118,7 +122,8 @@ help:
 	@echo "Targets:"
 	@echo "  all / build     Configure (if needed) + build (Release, parallel)"
 	@echo "  test            Build + run ctest"
-	@echo "  run             Build + launch (default music, 132 bpm)"
+	@echo "  run             Build + launch (Stars by cs127, tempo from the module)"
+	@echo "  run-silicon     Build + launch with Silicon Dancer by Drozerix"
 	@echo "  run-pulse       Build + launch with the CC0 Wireframe Pulse track"
 	@echo "  configure       Wipe build/ and reconfigure"
 	@echo "  reconfigure     Alias for configure"
